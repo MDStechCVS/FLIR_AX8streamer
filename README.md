@@ -9,6 +9,7 @@
 ## SDK caution
 This program can run on Windows 11.<br>
 Running on Anaconda 3
+Please refer to the manual to run the program.
 
 ## <div align="left">Install</div>
 Clone repo and install [requirements.txt](https://github.com/MDStechCVS/FLIR_AX8streamer/blob/main/requirements.txt) in a
