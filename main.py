@@ -160,8 +160,7 @@ class MainWindow(tk.Frame):
 
     # Save Button to Combobox   normal / disabled
     def save_activate(self):
-        print(self.save_excel_combobox['state'] )
-        if self.save_excel_combobox['state'] == 'normal':
+        if str(self.save_excel_combobox['state']) == 'normal':
             self.save_excel_combobox['state'] = 'disabled'
             self.file_save_active = True
             self.savebutton.config(text="Cancel")
@@ -169,13 +168,14 @@ class MainWindow(tk.Frame):
             self.save_excel_combobox['state'] = 'normal'
             self.file_save_active = False
             self.file_save_trigger = False
+            GT.data_box = []
             self.savebutton.config(text="선택")
 
     # Mouse Event Func
     def main_btn(self, event):
         x = event.x
         y = event.y
-        print(f'x = {x} y = {y}')
+        # print(f'x = {x} y = {y}')
         if 800< x < 900 and 500 < y < 600:
             print(self.main_dic)
 
@@ -323,11 +323,11 @@ class MainWindow(tk.Frame):
         self.high_temp_entry.insert(0, f"{self.main_dic[selected_value]['max']}")
         
         
-        save_b = tk.Button(new_window, text="Save", command = lambda: self.save_data(selected_value), fg="black", bg="#ff7f00", font=('gothic', 13, 'bold'), width = 6, height=3)
+        save_b = tk.Button(new_window, text="Save", command = lambda: self.save_data(selected_value), fg="black", bg="#ff7f00", font=('gothic', 13, 'bold'), width = 5, height=2)
         save_b.place(x = 450, y = 330)
 
         
-        Cancel_b = tk.Button(new_window, text="Cancel", command=lambda: self.close_toplevel(new_window), fg="black", bg="#ff7f00", font=('gothic', 13, 'bold'), width = 6, height=3)
+        Cancel_b = tk.Button(new_window, text="Cancel", command=lambda: self.close_toplevel(new_window), fg="black", bg="#ff7f00", font=('gothic', 13, 'bold'), width = 5, height=2)
         Cancel_b.place(x = 520, y = 330)
         
         
@@ -383,6 +383,7 @@ class TempMonitor():
         self.STD = SaveTempData()
         self.save_list = []
         self.save_time = []
+        self.data_box = []
         
     
 
@@ -489,7 +490,6 @@ class TempMonitor():
     # URL box 생성, get temp 반복문, 저장
     def TempFromURL(self):
         url_box = []
-        data_box = []
         for number in range(1,4):
             url_box.append(f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/spot/{number}/valueT")
         for number in range(1,4):
@@ -507,16 +507,16 @@ class TempMonitor():
                         st = time.time()
                         st_set = False          
                     cnt += 1
-                    data_box.append(temp_data)
+                    self.data_box.append(temp_data)
                     current_time = time.time()
                     if current_time - st >= main_frame.interval:
-                        self.STD.DataToCSV(data_box)
-                        data_box = []
+                        self.STD.DataToCSV(self.data_box)
+                        self.data_box = []
                         st = current_time
                 else:
-                    data_box = []
+                    self.data_box = []
             else:
-                data_box = []
+                self.data_box = []
             time.sleep(0.01)
 
             
@@ -537,8 +537,3 @@ if __name__ == "__main__":
     t = threading.Thread(target = GT.TempFromURL, daemon=True).start()
 
     root.mainloop()
-
-
-
-
-

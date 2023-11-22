@@ -22,7 +22,7 @@ class CAMERA_API():
     
     # GET value
     def get_parameter(self, infor_dict):
-        print("GET parameter Start")
+        # print("GET parameter Start")
         target = None
         number = None
         for main_key, sub_dict in infor_dict.items():
@@ -42,7 +42,7 @@ class CAMERA_API():
                 if response.status_code == 200:
                     value_node = root.find(".//xsi:value", namespaces={"xsi": "http://www.w3.org/2001/XMLSchema-instance"}).text
                     infor_dict[main_key][sub_key] = value_node
-                    print("GET parameter Complete")
+                    
                 else:
                     print("GET Parameter FAIL")
         return infor_dict
