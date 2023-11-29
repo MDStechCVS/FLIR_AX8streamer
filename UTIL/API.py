@@ -63,7 +63,7 @@ class CAMERA_API():
                     value = True
                 else:
                     value = False
-            url = f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/{target}/{number}/{sub_key}?set={value}"
+            url = f"http://{self.ip}/prod/res/image/sysimg/measureFuncs/{target}/{number}/{sub_key}?set={value}"
             response = requests.get(url)
             if response.status_code == 200:
                 print("SET parameter Complete")
