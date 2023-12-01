@@ -491,10 +491,10 @@ class TempMonitor():
     def TempFromURL(self):
         url_box = []
         for number in range(1,4):
-            url_box.append(f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/spot/{number}/valueT")
+            url_box.append(f"http://{main_frame.main_ip}/prod/res/image/sysimg/measureFuncs/spot/{number}/valueT")
         for number in range(1,4):
-            url_box.append(f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/mbox/{number}/maxT")
-            url_box.append(f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/mbox/{number}/minT")
+            url_box.append(f"http://{main_frame.main_ip}/prod/res/image/sysimg/measureFuncs/mbox/{number}/maxT")
+            url_box.append(f"http://{main_frame.main_ip}/prod/res/image/sysimg/measureFuncs/mbox/{number}/minT")
         cnt = 0
         st = None
         st_set = True
