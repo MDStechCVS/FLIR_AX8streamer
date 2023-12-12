@@ -487,6 +487,8 @@ class TempMonitor():
             save_value['BOX3_MIN'] = result_list[8]
         save_value['TIME'] = datetime.now().strftime("%H_%M_%S")
         return save_value
+    
+    
     # URL box 생성, get temp 반복문, 저장
     def TempFromURL(self):
         url_box = []
