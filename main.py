@@ -9,7 +9,7 @@ import numpy as np
 import xml.etree.ElementTree as ET
 from UTIL.CAMERA_API import API
 from UTIL.Temp_Log import TempMonitor
-from UTIL.VIDEO import OpenCVCamera
+from UTIL.CAM import OpenCVCamera
 from UTIL.UIGenerator import INITUI
 
 
