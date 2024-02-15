@@ -1,4 +1,3 @@
-# VIDEO.py
 import numpy as np
 import cv2, time
 from kivy.uix.image import Image
@@ -16,16 +15,10 @@ import threading
 class OpenCVCamera(Image):
     def __init__(self, ip, layout, **kwargs):
         super(OpenCVCamera, self).__init__(**kwargs)
-        stream_ip = "rtsp://"+ ip + "/avc" 
+        self.stream_ip = "rtsp://"+ ip + "/avc" 
         self.layout = layout
-
-        try:
-            self.capture = cv2.VideoCapture(stream_ip)
-            if not self.capture.isOpened():
-                raise Exception("Error: Could not open the stream.")
-        except Exception as e:
-            print(f"Error initializing camera: {e}")
-            return
+        self.capture = None
+        self.make_cap_obj(self.stream_ip)
         threading.Thread(target=self.get_image, daemon=True).start()
         Clock.schedule_interval(self.update, 1.0 / 10.0)  # 9 FPS
         self.capture_trigger = False
@@ -34,6 +27,16 @@ class OpenCVCamera(Image):
                         pos=(-440, -240), 
                         color=(1, 1, 1, 1))
         self.layout.add_widget(self.coordinate_label)
+
+
+    def make_cap_obj(self, ip):
+        try:
+            self.capture = cv2.VideoCapture(ip)
+            if not self.capture.isOpened():
+                raise Exception("Error: Could not open the stream.")
+        except Exception as e:
+            print(f"Error initializing camera: {e}")
+            return
 
     def save_image(self, instance):
         self.capture_trigger = True
@@ -50,12 +53,13 @@ class OpenCVCamera(Image):
                 self.texture = texture
             else:
                 print('pass while')
-                pass
+            time.sleep(0.01)
         except Exception as e:
             print(f"Error in camera update: {traceback.format_exc()}")
 
     def get_image(self):
         self.image_queue = queue.Queue()
+        self.error_cnt = 0
         try:
             while True:
                 ret, frame = self.capture.read()
@@ -72,6 +76,12 @@ class OpenCVCamera(Image):
                 time.sleep(0.001)
         except Exception as e:
             print(f"get_image traceback : {traceback.format_exc()}")
+            print(f"camera ERROR = {e}")
+            self.error_cnt += 1
+            if self.error_cnt <= 10:
+                print("connect retry")
+                self.make_cap_obj(self.stream_ip)
+                time.sleep(1)
 
     def save_info(self):
         folder_path = f'./save'

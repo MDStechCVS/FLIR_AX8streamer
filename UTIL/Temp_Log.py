@@ -1,5 +1,6 @@
 import os
 import time
+import traceback
 import matplotlib
 import pandas as pd
 matplotlib.use('Agg')
@@ -49,8 +50,6 @@ class TempMonitor():
                 result.append(value)
         return result
 
-
-
     def get_temperature(self, urls):
         for url in urls:
             pass
@@ -77,7 +76,6 @@ class TempMonitor():
             else:
                 print("invalid number")
         
-        
         if  category == "mbox": 
             if number == '1':
                 if min_max == "maxT":
@@ -94,7 +92,6 @@ class TempMonitor():
                     self.change_tab_text_color(3, self.box1_result)
                     self.box1_result = [None, None]
                     
-                    
             elif number == '2':
                 if min_max == "maxT":
                     if temperature <= int(self.info['BOX2_MAX']):  
@@ -109,7 +106,6 @@ class TempMonitor():
                 if all(self.box2_result):
                     self.change_tab_text_color(4, self.box2_result)
                     self.box2_result = [None, None]
-                
                     
             elif number == '3':
                 if min_max == "maxT":
@@ -126,61 +122,64 @@ class TempMonitor():
                     self.change_tab_text_color(5, self.box3_result)
                     self.box3_result = [None, None]
 
-        
-
 
     def temp_thread(self):
         temp_log = []
 
         while True:
-            self.active_list = self.key_filter(self.info, 'ACTIVE')
-            print(f"active_list = {self.active_list}")
-            if not any(self.active_list):
-                time.sleep(1)
-                continue
-            now = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-            temp_log.append(now)
-            for idx, active in enumerate(self.active_list):
-                if active == "true":
-                    for url in self.url_dic[idx]:
-                        res = url.split('/')
-                        category = res[-3]
-                        number = res[-2]
-                        min_max = res[-1]
-                        temperature = float(self.API.get_camera_value(url))
-                        calvin_value = round(temperature - 273.15, 2)
-                        self.temp_alarm(category, number, calvin_value, min_max)
-                        temp_log.append(calvin_value)
-            
-                else:
-                    self.change_tab_text_color(idx, "OK")
-
-            if self.UI.data_write:
-                self.data_list.append(temp_log)
-                print(self.UI.data_selected)
-                current_time = time.time()
-                print(f'1 : {current_time - self.UI.start_time}')
-                print(f"2 : {self.UI.interval}")
-                print(f"3 : {current_time - self.UI.start_time >= self.UI.interval}")
-                if current_time - self.UI.start_time >= self.UI.interval:
-                    self.temperature_to_csv(self.active_list, self.data_list)
-                    self.data_list = []
-                    self.UI.start_time = time.time()
+            try:
+                self.active_list = self.key_filter(self.info, 'ACTIVE')
+                print(f"active_list = {self.active_list}")
+                if not any(self.active_list):
+                    time.sleep(1)
+                    continue
+                now = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+                temp_log.append(now)
+                try:
+                    for idx, active in enumerate(self.active_list):
+                        if active == "true":
+                            for url in self.url_dic[idx]:
+                                res = url.split('/')
+                                category = res[-3]
+                                number = res[-2]
+                                min_max = res[-1]
+                                if float(self.API.get_camera_value(url)) == None:
+                                    continue
+                                temperature = float(self.API.get_camera_value(url))
+                                calvin_value = round(temperature - 273.15, 2)
+                                self.temp_alarm(category, number, calvin_value, min_max)
+                                temp_log.append(calvin_value)
                     
+                        else:
+                            self.change_tab_text_color(idx, "OK")
+                        time.sleep(0.01)
+                except Exception as e:
+                    print(f"Get Temp Value Error : {traceback.format_exc()}")
+                    continue
 
-            
-            temp_log = []
+                if self.UI.data_write:
+                    self.data_list.append(temp_log)
+                    print(self.UI.data_selected)
+                    current_time = time.time()
+                    print(f'1 : {current_time - self.UI.start_time}')
+                    print(f"2 : {self.UI.interval}")
+                    print(f"3 : {current_time - self.UI.start_time >= self.UI.interval}")
+                    if current_time - self.UI.start_time >= self.UI.interval:
+                        self.temperature_to_csv(self.active_list, self.data_list)
+                        self.data_list = []
+                        self.UI.start_time = time.time()
+                        
+                temp_log = []
+                if self.UI.save_trigger == True:
+                    self.UI.data_write = False
+                    print(f"data_list check  = {self.data_list}")
+                    self.data_list = []
+                    self.UI.save_trigger = False
+                
+                time.sleep(0.01)
 
-            if self.UI.save_trigger == True:
-                self.UI.data_write = False
-                print(f"data_list check  = {self.data_list}")
-                self.data_list = []
-                self.UI.save_trigger = False
-            
-        
-
-            # print(f'final dic = {self.save_temperature_data}')
-            time.sleep(0.01)
+            except Exception as e:
+                print(f"Temp Thread Exception {traceback.format_exc()}")
 
         
     def data_collect(self, category, number,  min_max, calvin_value):
@@ -189,13 +188,11 @@ class TempMonitor():
             save_name = f"{save_name}_{min_max}"
         self.save_temperature_data[save_name] = calvin_value
         
-    
     def temperature_to_csv(self, active_list, data):
         columns = self.make_header(active_list)
         file_path = self.make_filepath()
         df = pd.DataFrame(data, columns=columns)
         df.to_csv(f'{file_path}', index=False, columns=columns)
-
 
     def make_filepath(self):
         file_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -236,9 +233,6 @@ class TempMonitor():
             tab = self.tabs[tab_index]  
             tab.color = color
 
-
-
-
 class SaveTempData():
     def __init__(self):
         pass
@@ -256,4 +250,3 @@ class SaveTempData():
 
         # 데이터프레임을 CSV 파일로 저장
         df.to_csv(f'{file_path}', index=False, columns=header)
-

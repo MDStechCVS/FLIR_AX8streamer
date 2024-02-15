@@ -38,6 +38,7 @@ class INITUI():
         self.data_selected = ''
         self.interval = 0
         self.start_time = None
+        self.start_button = None
 
 
         self.create_widget()
@@ -47,13 +48,6 @@ class INITUI():
         
         
     def create_widget(self):
-        
-        # self.coordinate_label = Label(text="X = 0\nY = 0", 
-        #                         font_size = 30, 
-        #                         pos=(-440, -240), 
-        #                         color=(1, 1, 1, 1))
-                
-                
         self.led_text = Label(text="LED\nON/OFF", 
                                 font_size = 20, 
                                 pos=(343, 360), 
@@ -142,8 +136,6 @@ class INITUI():
                 size=(80, 30),  # 라디오 버튼의 크기를 지정합니다.
                 pos=(818, 400 - i * 30),  # 라디오 버튼의 위치를 조정합니다.
             )
-            # if option == int(self.info['PALETTE'])-1:
-            #     radio_button.state = 'down'
             radio_button.bind(on_release=self.palette_button_release)
             self.palette_toggle_group.append(radio_button)
 
@@ -167,7 +159,7 @@ class INITUI():
         )
         
         
-        # tab1
+        # tab make widget
         self.tabbed_panel = TabbedPanel(size_hint=(None, None), size=(600, 150), pos=(205, 0), do_default_tab=False)
 
         self.tabs = []
@@ -323,9 +315,8 @@ class INITUI():
             tab.add_widget(tab_layout)
             self.tabbed_panel.add_widget(tab)
 
-        
-        # add_widget 1 
-        # self.layout.add_widget(self.coordinate_label)
+
+        # layout make widget
         self.layout.add_widget(self.led_text)
         self.layout.add_widget(self.led_button)
         self.layout.add_widget(self.overlay_text)
@@ -337,45 +328,28 @@ class INITUI():
         self.layout.add_widget(self.camera_palette_text)
         self.layout.add_widget(self.tabbed_panel)
         self.layout.add_widget(web_button)
-
-
         for i in range(3):
             self.layout.add_widget(self.mode_toggle_group[i])
         for i in range(6):
             self.layout.add_widget(self.palette_toggle_group[i])
-
         self.layout.add_widget(self.mode_select_button)
         self.layout.add_widget(self.palette_select_button)            
-
-        
-
-
-
-        # bind 1 
         web_button.bind(on_press=self.open_internal_website)
-
-        
         self.led_button.bind(on_release = self.led_button_active)
         self.overlay_button.bind(on_release = self.overlay_button_active)
         self.mode_select_button.bind(on_release = self.camera_mode_change)
         self.palette_select_button.bind(on_release = self.palette_change)
-        # self.saveimg_button.bind(on_release=self.save_image)
         self.savedata_button.bind(on_release=self.save_data_popup)
 
         
     def save_data_popup(self, instance):
         popup_layout = BoxLayout(orientation='vertical')
-
-        
         self.save_toggle_group = []
-
         # 토글 버튼 1, 2, 3, 4를 만들고 그룹에 추가
         toggle_button1 = ToggleButton(text='30 Seconds', group='toggle_group')
         toggle_button2 = ToggleButton(text='1 Minute', group='toggle_group')
         toggle_button3 = ToggleButton(text='5 Minutes', group='toggle_group')
         toggle_button4 = ToggleButton(text='10 Minutes', group='toggle_group')
-
-        
 
         self.save_toggle_group.extend([toggle_button1, toggle_button2, toggle_button3, toggle_button4])
 
@@ -383,25 +357,27 @@ class INITUI():
             if self.data_toggle_lock:
                 toggle_button.disabled = True
             popup_layout.add_widget(toggle_button)
-
+                
         # 시작 버튼과 중지 버튼 생성
-        start_button = Button(text='Start')
+        self.start_button = Button(text='Start')
+
+        if self.data_toggle_lock:
+            self.start_button.disabled = True
+        
         stop_button = Button(text='Stop')
         
-        start_button.bind(on_press=self.start_button_pressed)
+        self.start_button.bind(on_press=self.start_button_pressed)
         stop_button.bind(on_press=self.stop_button_pressed)
 
         # 레이아웃에 시작 버튼과 중지 버튼 추가
-        popup_layout.add_widget(start_button)
+        popup_layout.add_widget(self.start_button)
         popup_layout.add_widget(stop_button)
-
-
 
         # 팝업 생성
         popup = Popup(title="Temperature Data Save", content=popup_layout, size_hint=(None, None), size=(400, 400))
         popup.open()
     
-
+    # date write func
     def start_button_pressed(self, instance):
         self.start_time = time.time()
         self.data_selected = [btn.text for btn in self.save_toggle_group if btn.state == 'down']
@@ -409,6 +385,7 @@ class INITUI():
         for toggle_button in self.save_toggle_group:
                 toggle_button.disabled = True
                 self.data_toggle_lock = True
+        self.start_button.disabled = True
         print(self.data_selected)
         if self.data_selected == ["30 Seconds"]:
             self.interval = 30
@@ -423,23 +400,22 @@ class INITUI():
             self.interval = 600
         else:
             print("not selected")
-
-
-
-        # if self.data_selected
         self.data_write = True
 
-
+    # data write stop
     def stop_button_pressed(self, instance):
         for toggle_button in self.save_toggle_group:
                 toggle_button.disabled = False
                 self.data_toggle_lock = False
+        self.start_button.disabled = False
         self.save_trigger = True
         
 
         print("Stop button pressed")
 
-    
+
+    # etc func
+            
     def open_internal_website(self, instance):
         internal_ip_address = self.ip
         if not internal_ip_address.startswith('http://') and not internal_ip_address.startswith('https://'):
@@ -448,7 +424,6 @@ class INITUI():
         webbrowser.open(internal_ip_address)
     
     
-    # 기능 1 
     
     
     def palette_button_release(self, instance):
@@ -589,22 +564,17 @@ class INITUI():
             print(f"SPOT1_MIN = {min_value}")
             print(f"SPOT1_MAX = {max_value}")
 
-
         elif tab_name == "TAB 2":
             self.info['SPOT2_MIN'] = min_value
             self.info['SPOT2_MAX'] = max_value
             print(f"SPOT2_MIN = {min_value}")
             print(f"SPOT2_MAX = {max_value}")
-
-
         
         elif tab_name == "TAB 3":
             self.info['SPOT3_MIN'] = min_value
             self.info['SPOT3_MAX'] = max_value
             print(f"SPOT3_MIN = {min_value}")
             print(f"SPOT3_MAX = {max_value}")
-
-
         
         elif tab_name == "TAB 4":
             self.info['BOX1_MIN'] = min_value
@@ -612,20 +582,17 @@ class INITUI():
             print(f"BOX1_MIN = {min_value}")
             print(f"BOX1_MAX = {max_value}")
 
-
         elif tab_name == "TAB 5":
             self.info['BOX2_MIN'] = min_value
             self.info['BOX2_MAX'] = max_value
             print(f"BOX2_MIN = {min_value}")
             print(f"BOX2_MAX = {max_value}")
 
-
         elif tab_name == "TAB 6":
             self.info['BOX3_MIN'] = min_value
             self.info['BOX3_MAX'] = max_value
             print(f"BOX3_MIN = {min_value}")
             print(f"BOX3_MAX = {max_value}")
-
 
         else:
             print("no TAB!")
