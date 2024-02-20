@@ -4,7 +4,9 @@ import time
 import queue
 import requests
 import threading
+import urllib3
 import traceback
+import logging
 import numpy as np
 import xml.etree.ElementTree as ET
 from UTIL.CAMERA_API import API
@@ -25,6 +27,11 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.graphics import Color, Rectangle
 from kivy.uix.floatlayout import FloatLayout
 
+
+
+urllib3_log = logging.getLogger("urllib3")
+urllib3_log.setLevel(logging.CRITICAL)
+
 Window.size = (1000, 800)
 Window.resizable = False
 
@@ -41,7 +48,7 @@ class LoginApp(App):
         self.ip = None
         self.login_layout = BoxLayout(orientation='vertical')
         self.ip_label = Label(text='Enter IP:', font_size=30)
-        self.ip_input = TextInput(hint_text='IP Address', text='Input IP Address', font_size=30, width=1000, height=50)
+        self.ip_input = TextInput(hint_text='IP Address', text='IP', font_size=30, width=1000, height=50)
         self.login_button = Button(text='SELECT', font_size=30)
         self.login_button.bind(on_press=self.camera_connect_check)
         self.login_layout.add_widget(self.ip_label)

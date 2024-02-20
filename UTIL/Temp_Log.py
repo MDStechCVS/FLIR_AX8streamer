@@ -55,6 +55,7 @@ class TempMonitor():
             pass
     
     def temp_alarm(self, category, number, temperature, min_max = None ):
+        print(f"temperature = {temperature}")
         if  category == "spot":
             if number == "1":
                 if temperature > int(self.info['SPOT1_MIN']) and temperature < int(self.info['SPOT1_MAX']):
@@ -153,9 +154,11 @@ class TempMonitor():
                         else:
                             self.change_tab_text_color(idx, "OK")
                         time.sleep(0.01)
+                 	 
                 except Exception as e:
                     print(f"Get Temp Value Error : {traceback.format_exc()}")
                     continue
+                time.sleep(1)
 
                 if self.UI.data_write:
                     self.data_list.append(temp_log)

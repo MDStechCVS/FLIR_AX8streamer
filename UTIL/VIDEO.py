@@ -20,7 +20,7 @@ class OpenCVCamera(Image):
         self.capture = None
         self.make_cap_obj(self.stream_ip)
         threading.Thread(target=self.get_image, daemon=True).start()
-        Clock.schedule_interval(self.update, 1.0 / 10.0)  # 9 FPS
+        Clock.schedule_interval(self.update, 1.0 / 10.0)  
         self.capture_trigger = False
         self.coordinate_label = Label(text="X = 0\nY = 0", 
                         font_size = 30, 
@@ -78,9 +78,10 @@ class OpenCVCamera(Image):
             print(f"get_image traceback : {traceback.format_exc()}")
             print(f"camera ERROR = {e}")
             self.error_cnt += 1
-            if self.error_cnt <= 10:
+            if self.error_cnt >= 10:
                 print("connect retry")
                 self.make_cap_obj(self.stream_ip)
+                self.error_cnt = 0
                 time.sleep(1)
 
     def save_info(self):
