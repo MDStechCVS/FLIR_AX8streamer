@@ -22,20 +22,20 @@ class TempMonitor():
         self.active_list = None
         self.data_list = []
         self.url_dic = {
-                        0:[f'http://192.168.0.178/prod/res/image/sysimg/measureFuncs/spot/1/valueT'], 
-                        1: [f'http://192.168.0.178/prod/res/image/sysimg/measureFuncs/spot/2/valueT'],
-                        2: [f'http://192.168.0.178/prod/res/image/sysimg/measureFuncs/spot/3/valueT'],
+                        0:[f'http://{self.ip}/prod/res/image/sysimg/measureFuncs/spot/1/valueT'], 
+                        1: [f'http://{self.ip}/prod/res/image/sysimg/measureFuncs/spot/2/valueT'],
+                        2: [f'http://{self.ip}/prod/res/image/sysimg/measureFuncs/spot/3/valueT'],
                         3: [
-                            f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/mbox/1/maxT",
-                            f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/mbox/1/minT"
+                            f"http://{self.ip}/prod/res/image/sysimg/measureFuncs/mbox/1/maxT",
+                            f"http://{self.ip}/prod/res/image/sysimg/measureFuncs/mbox/1/minT"
                             ],
                         4: [
-                            f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/mbox/2/maxT",
-                            f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/mbox/2/minT"
+                            f"http://{self.ip}/prod/res/image/sysimg/measureFuncs/mbox/2/maxT",
+                            f"http://{self.ip}/prod/res/image/sysimg/measureFuncs/mbox/2/minT"
                             ],
                         5: [
-                            f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/mbox/3/maxT",
-                            f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/mbox/3/minT"
+                            f"http://{self.ip}/prod/res/image/sysimg/measureFuncs/mbox/3/maxT",
+                            f"http://{self.ip}/prod/res/image/sysimg/measureFuncs/mbox/3/minT"
                             ],
                         }
         self.box1_result = [None, None]
