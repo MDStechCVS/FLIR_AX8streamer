@@ -23,7 +23,7 @@ python main.py
 
 ## AX8 Window
 
-![ax8](https://github.com/MDStechCVS/FLIR_AX8streamer/assets/142575573/7341ff4e-6657-4be3-80d5-2d82c097c280)
+![제목 없음](https://github.com/MDStechCVS/FLIR_AX8streamer/assets/142575573/4e773da4-0d0e-40c6-8bd8-66fe24c4d821)
 
 ## <div align="left">Contact</div>
 For bugs and inquiries, please contact us through GitHub Issues or team email.<br>
