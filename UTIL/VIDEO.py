@@ -91,7 +91,7 @@ class OpenCVCamera(Image):
                 if self.capture_trigger:
                     save_path = self.save_info()
                     cv2.imwrite(f"{save_path}", frame)
-                    logger.info(f"print(f"save_path = {save_path}")")
+                    logger.info(f"save_path = {save_path}")
                     print(f"save_path = {save_path}")
                     self.capture_trigger = False
                 time.sleep(0.05)
