@@ -9,7 +9,7 @@ rtsp_url = "rtsp://192.168.0.178/avc"
 # ax8 기준 8이 최대
 try:
     cap = cv2.VideoCapture(rtsp_url)
-    cap.set(cv2.CAP_PROP_FPS, 30)
+    cap.set(cv2.CAP_PROP_FPS, 7)
 except:
     print("not connect")
 
@@ -22,8 +22,6 @@ cnt = 0
 fps = 0
 frame_count = 0
 start_time = time.time()
-print("sleep go ")
-# time.sleep(1)
 while True:
     # 현재 시간 측정
     current_time = time.time()

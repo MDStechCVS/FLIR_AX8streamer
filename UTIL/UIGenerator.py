@@ -1,29 +1,26 @@
 import time
+import logging
+import traceback
 import webbrowser
 import numpy as np
 import xml.etree.ElementTree as ET
-import traceback
 
-
-from kivy.app import App
-from kivy.clock import Clock
-from kivy.config import Config
 from kivy.uix.label import Label
-from kivy.uix.image import Image
 from kivy.uix.popup import Popup
 from kivy.uix.button import Button
-from kivy.core.window import Window
 from kivy.uix.checkbox import CheckBox
 from kivy.uix.textinput import TextInput
 from kivy.uix.boxlayout import BoxLayout
-from kivy.graphics.texture import Texture
-from kivy.graphics import Color, Rectangle
 from kivy.uix.floatlayout import FloatLayout
+from kivy.garden.graph import Graph, LinePlot
 from kivy.uix.togglebutton import ToggleButton
-from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelItem
+from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelHeader
+
+logger = logging.getLogger("TRACE")
 
 
-class INITUI():
+
+class MAINUI():
     def __init__(self, layout, api, ip):
         self.layout = layout
         self.api = api
@@ -33,319 +30,916 @@ class INITUI():
         self.selected_mode = None
         self.selected_palette = None
         self.data_toggle_lock = False # active => False // inactive => True
+        self.sub_info = [['SPOT1_ACTIVE', 'SPOT1_X', 'SPOT1_Y', 'SPOT1_MIN', 'SPOT1_MAX'], 
+                        ['SPOT2_ACTIVE', 'SPOT2_X', 'SPOT2_Y', 'SPOT2_MIN', 'SPOT2_MAX'], 
+                        ['SPOT3_ACTIVE', 'SPOT3_X', 'SPOT3_Y', 'SPOT3_MIN', 'SPOT3_MAX'], 
+                        ['BOX1_ACTIVE', 'BOX1_X', 'BOX1_Y','BOX1_MIN', 'BOX1_MAX', 'BOX1_W', 'BOX1_H'], 
+                        ['BOX2_ACTIVE', 'BOX2_X', 'BOX2_Y', 'BOX2_MIN', 'BOX2_MAX', 'BOX2_W', 'BOX2_H'], 
+                        ['BOX3_ACTIVE', 'BOX3_X', 'BOX3_Y','BOX3_MIN', 'BOX3_MAX', 'BOX3_W', 'BOX3_H']]
+
         self.data_write = False
         self.save_trigger = False
         self.data_selected = ''
         self.interval = 0
         self.start_time = None
         self.start_button = None
-
+        self.temp_tabs = []
+        self.chart_tabs = []
+        self.chart_data_spot1 = []
+        self.chart_data_spot2 = []
+        self.chart_data_spot3 = []
+        self.chart_data_box1 = []
+        self.chart_data_box2 = []
+        self.chart_data_box3 = []
 
         self.create_widget()
 
+
+    def create_chart_widget(self):
+        panel_pos = (1020, 410)
+        self.chart_panel = TabbedPanel(size_hint=(None, None), size=(600, 650), pos = panel_pos, do_default_tab=False)
+        spot1_tab = TabbedPanelHeader(text='SPOT1')
+        spot2_tab = TabbedPanelHeader(text='SPOT2')
+        spot3_tab = TabbedPanelHeader(text='SPOT3')
+        box1_tab = TabbedPanelHeader(text='BOX1')
+        box2_tab = TabbedPanelHeader(text='BOX2')
+        box3_tab = TabbedPanelHeader(text='BOX3')
+
+        self.chart_tabs.append(spot1_tab)
+        self.chart_tabs.append(spot2_tab)
+        self.chart_tabs.append(spot3_tab)
+        self.chart_tabs.append(box1_tab)
+        self.chart_tabs.append(box2_tab)
+        self.chart_tabs.append(box3_tab)
+
+
+        spot1_tab.content = self.create_chart_content('SPOT1')
+        spot2_tab.content = self.create_chart_content('SPOT2')
+        spot3_tab.content = self.create_chart_content('SPOT3')
+        box1_tab.content = self.create_chart_content('BOX1')
+        box2_tab.content = self.create_chart_content('BOX2')
+        box3_tab.content = self.create_chart_content('BOX3')
+
+
+        self.chart_panel.add_widget(spot1_tab)
+        self.chart_panel.add_widget(spot2_tab)
+        self.chart_panel.add_widget(spot3_tab)
+        self.chart_panel.add_widget(box1_tab)
+        self.chart_panel.add_widget(box2_tab)
+        self.chart_panel.add_widget(box3_tab)
         
+        return self.chart_panel
+    
 
+    def create_chart_content(self, name):
+        if name == "SPOT1":
+            graph, self.plot_spot1 = self.create_graph("spot")
+            self.graph_spot1 = graph
+            return graph
+        elif name == "SPOT2":
+            graph, self.plot_spot2 = self.create_graph("spot")
+            self.graph_spot2 = graph
+            # self.update_graph(graph, plot)
+            return graph
+        elif name == "SPOT3":
+            graph, self.plot_spot3 = self.create_graph("spot")
+            self.graph_spot3 = graph
+            # self.update_graph(graph, plot)
+            return graph
+        elif name == "BOX1":
+            graph, self.boxplot_max_1, self.boxplot_min_1 = self.create_graph("box")
+            self.graph_box1 = graph
+            return graph
+        elif name == "BOX2":
+            graph, self.boxplot_max_2, self.boxplot_min_2 = self.create_graph("box")
+            self.graph_box2 = graph
+            return graph
+        elif name == "BOX3":
+            graph, self.boxplot_max_3, self.boxplot_min_3 = self.create_graph("box")
+            self.graph_box3 = graph
+            return graph
+
+
+    def create_graph(self, category):
+        graph = Graph(x_ticks_minor=1,
+                    y_ticks_major=5,
+                    y_grid_label=True, x_grid_label=True, padding=5,
+                    x_grid=True, y_grid=True)
+        graph.x_label = 'Time'
+        graph.x_ticks_major = 0
+        graph.x_grid_label = True
+        graph.x_label_rotation = 45
+
+        # Adjusting graph properties
+        graph.xmin = -0.5  # x 축 최솟값
+        graph.xmax = 9.5  # x 축 최댓값
+        graph.ymin = 0  # y 축 최솟값
+        graph.ymax = 50  # y 축 최댓값
+
+        # SmoothLinePlot으로 그래프를 만듭니다.
+        if category == "spot":
+            plot = LinePlot(color=[1, 0, 0, 1], line_width=4)
+            graph.add_plot(plot)
+            return graph, plot
+        if category == "box":
+            plot1 = LinePlot(color=[1, 0, 0, 1], line_width=4)
+            plot2 = LinePlot(color=[0, 0, 1, 1], line_width=4)
+            graph.add_plot(plot1)
+            graph.add_plot(plot2)
+            return graph, plot1, plot2
+
+
+    def update_graph(self, graph, plot):
+        # Generate random data for 10 points
+        x = np.arange(0, 10, 1)  # 범위를 0부터 90까지로 변경하여 10개의 데이터를 생성
+        y = np.random.randint(0, 10, size=1)
+        data = list(zip(x, y))
+        # Update the plot
+        plot.points = data
+
+            
+    def update_graph_spot(self, data, target_plot):
+        x = list(range(len(data)))  # x 값을 인덱스로 설정
+        y = data  # y 값은 주어진 데이터 그대로 사용
+
+        target_plot.points = list(zip(x, y))
+
+
+    def update_graph_box(self, data, target_plot1, target_plot2):
+        x = list(range(len(data)))  
+        y1 = [entry[0] for entry in data]  # 데이터 리스트 안의 첫 번째 요소로부터 첫 번째 plot에 대한 y값 추출
+        y2 = [entry[1] for entry in data]  # 데이터 리스트 안의 두 번째 요소로부터 두 번째 plot에 대한 y값 추출
+
+        target_plot1.points = list(zip(x, y1))
+        target_plot2.points = list(zip(x, y2))
+
+
+    def transfer_temperature(self,category, temperature):
+        if category == "spot1":
+            self.chart_data_spot1.append(temperature)
+            data = self.list_normalize(self.chart_data_spot1)
+            self.update_graph_spot(data, self.plot_spot1)
+            print(f"spot1 data\t len = {len(data)}   data = {data}")
         
+        elif category == "spot2":
+            self.chart_data_spot2.append(temperature)
+            data = self.list_normalize(self.chart_data_spot2)
+            self.update_graph_spot(data, self.plot_spot2)
+            print(f"spot2 data\t len = {len(data)}   data = {data}")
         
-    def create_widget(self):
-        self.led_text = Label(text="LED\nON/OFF", 
-                                font_size = 20, 
-                                pos=(343, 360), 
-                                color=(1, 1, 1, 1))
+        elif category == "spot3":
+            self.chart_data_spot3.append(temperature)
+            data = self.list_normalize(self.chart_data_spot3)
+            self.update_graph_spot(data, self.plot_spot3)
+            print(f"spot3 data\t len = {len(data)}   data = {data}")
         
-        self.led_button = Button(
-                            text= 'ON' if self.info['LED'] == "true" else "OFF",
-                            size=(60, 60),
-                            size_hint=(None, None),
-                            pos=(900, 730)
-                            )
+        elif category == "box1":
+            self.chart_data_box1.append(temperature)
+            self.chart_data_box1 = self.list_normalize(self.chart_data_box1)
+            self.update_graph_box(self.chart_data_box1, self.boxplot_max_1, self.boxplot_min_1)
+            # print(f"box1 data\t len = {len(data)}   data = {data}")
         
-        self.overlay_text = Label(text="OVERLAY\nON/OFF", 
-                font_size = 20, 
-                pos=(350, 290), 
-                color=(1, 1, 1, 1))
-
-
-        self.overlay_button = Button(
-                    text= 'ON' if self.info['OVERLAY'] == 'false' else 'OFF',
-                    size=(60, 60),  
-                    size_hint = (None,None),
-                    pos=(900, 660)
-                    )
-        self.setting_text = Label(text=" SAVE DATA", 
-                        font_size = 20, 
-                        pos=(365, -280), 
-                        color=(1, 1, 1, 1))
+        elif category == "box2":
+            self.chart_data_box2.append(temperature)
+            self.chart_data_box2 = self.list_normalize(self.chart_data_box2)
+            self.update_graph_box(self.chart_data_box2, self.boxplot_max_2, self.boxplot_min_2)
+            # print(f"box2 data\t len = {len(data)}   data = {data}")
         
-        self.saveimg_button = Button(
-            text=" Save\nImage",
-            size=(100, 50),  
-            size_hint = (None,None),
-            pos=(820, 50)
-            )
+        elif category == "box3":
+            self.chart_data_box3.append(temperature)
+            self.chart_data_box3 = self.list_normalize(self.chart_data_box3)
+            self.update_graph_box(self.chart_data_box3, self.boxplot_max_3, self.boxplot_min_3)
+            # print(f"box3 data\t len = {len(data)}   data = {data}")
+        else:
+            print("invalid Value")
+            
+
+    def list_normalize(self, data):
+        # 입력 데이터가 1차원 리스트인 경우
+        if isinstance(data[0], (int, float)):
+            if len(data) > 10:
+                # 최대 10개의 데이터만 유지하도록 잘라냄
+                data = data[-10:]
+            return data
+        # 입력 데이터가 2차원 리스트인 경우
+        elif isinstance(data[0], list):
+            # 2차원 리스트의 복사본 생성
+            copied_data = [sublist[:] for sublist in data]
+            for sublist in copied_data:
+                if len(sublist) == 11:
+                    # 첫 번째 요소 삭제
+                    del sublist[0]
+            if len(copied_data) > 10:
+                # 최대 10개의 서브 리스트만 유지하도록 잘라냄
+                copied_data = copied_data[-10:]
+            return copied_data
 
 
-        self.savedata_button = Button(
-            text="      Save\nTemperature",
-            size=(100, 50),  
-            size_hint = (None,None),
-            pos=(820, 0)
-            )
+    def create_tempature_widget(self):
+        panel_pos = (1020, 5)
+        # panel_pos = (1020, 720)
+        self.temp_panel = TabbedPanel(size_hint=(None, None), size=(600, 300), pos = panel_pos, do_default_tab=False)
+        spot1_tab = TabbedPanelHeader(text='SPOT1')
+        spot2_tab = TabbedPanelHeader(text='SPOT2')
+        spot3_tab = TabbedPanelHeader(text='SPOT3')
+        box1_tab = TabbedPanelHeader(text='BOX1')
+        box2_tab = TabbedPanelHeader(text='BOX2')
+        box3_tab = TabbedPanelHeader(text='BOX3')
         
-        self.camera_mode_text = Label(text=" CAMERA MODE", 
-                        font_size = 20, 
-                        pos=(375, 220), 
-                        color=(1, 1, 1, 1))
-                
-        self.mode_toggle_group = []
-        # 라디오 버튼 생성 및 그룹에 추가
-        for i, option in enumerate(['IR', 'Visual', 'MSX']):
-            radio_button = ToggleButton(
-                text=option,
-                group='mode_group',  # 그룹 이름을 지정하여 라디오 버튼 그룹을 형성합니다.
-                size_hint=(None, None),
-                size=(80, 30),  # 라디오 버튼의 크기를 지정합니다.
-                pos=(818, 570 - i * 30),  # 라디오 버튼의 위치를 조정합니다.
-            )
-            if i == int(self.info['MODE'])-1:
-                radio_button.state = 'down'
-            radio_button.bind(on_release=self.mode_button_release)
-            self.mode_toggle_group.append(radio_button)
+        self.temp_tabs.append(spot1_tab)
+        self.temp_tabs.append(spot2_tab)
+        self.temp_tabs.append(spot3_tab)
+        self.temp_tabs.append(box1_tab)
+        self.temp_tabs.append(box2_tab)
+        self.temp_tabs.append(box3_tab)
 
+        spot1_tab.content = self.create_temp_content('SPOT1')
+        spot2_tab.content = self.create_temp_content('SPOT2')
+        spot3_tab.content = self.create_temp_content('SPOT3')
+        box1_tab.content = self.create_temp_content('BOX1')
+        box2_tab.content = self.create_temp_content('BOX2')
+        box3_tab.content = self.create_temp_content('BOX3')
 
-        self.mode_select_button = Button(
-        text="Select",
-        size=(70, 90),  
-        size_hint = (None,None),
-        pos=(898, 510),
-        color=(0, 1, 0, 1)
-        )
-
-        self.camera_palette_text = Label(text="PALETTE CHANGE", 
-                                font_size = 20, 
-                                pos=(390, 50), 
-                                color=(1, 1, 1, 1))
-
-        self.palette_toggle_group = []
-        # 라디오 버튼 생성 및 그룹에 추가
-        for i, option in enumerate(['arctic', 'bw', 'iron', 'lava', 'rainbow', 'rainHC']):
-            radio_button = ToggleButton(
-                text=option,
-                group='palette_group',  # 그룹 이름을 지정하여 라디오 버튼 그룹을 형성합니다.
-                size_hint=(None, None),
-                size=(80, 30),  # 라디오 버튼의 크기를 지정합니다.
-                pos=(818, 400 - i * 30),  # 라디오 버튼의 위치를 조정합니다.
-            )
-            radio_button.bind(on_release=self.palette_button_release)
-            self.palette_toggle_group.append(radio_button)
-
-
-        self.palette_select_button = Button(
-        text="Select",
-        size=(70, 180),  
-        size_hint = (None,None),
-        pos=(898, 250),
-        color=(0, 1, 0, 1)
-        )
+        self.temp_panel.add_widget(spot1_tab)
+        self.temp_panel.add_widget(spot2_tab)
+        self.temp_panel.add_widget(spot3_tab)
+        self.temp_panel.add_widget(box1_tab)
+        self.temp_panel.add_widget(box2_tab)
+        self.temp_panel.add_widget(box3_tab)
         
-        
-                
-        web_button = Button(
-            text='Open Website',
-            font_size=15,
-            size_hint=(None, None),
-            size=(200, 50),
-            pos_hint={'center_x': 0.1, 'center_y': 0.03}
-        )
-        
-        
-        # tab make widget
-        self.tabbed_panel = TabbedPanel(size_hint=(None, None), size=(600, 150), pos=(205, 0), do_default_tab=False)
+        return self.temp_panel
+    
+    
+    def create_temp_content(self, name):
+        self.temp_tab_layout = FloatLayout(size=(600, 600))
+        try:
+            if "SPOT" in name:
 
-        self.tabs = []
+                if "1" in name : 
+                    self.make_temptab_ui(0)
 
-        for i in range(1, 7):
-            if i <= 3:
-                tab = TabbedPanelItem(text=f"SPOT {i}")
+                elif "2" in name:
+                    self.make_temptab_ui(1)
+
+                elif "3" in name:
+                    self.make_temptab_ui(2)
+
+            elif "BOX" in name:
+
+                if "1" in name:
+                    self.make_temptab_ui(3, True)
+
+                elif "2" in name:
+                    self.make_temptab_ui(4, True)
+
+                elif "3" in name:
+                    self.make_temptab_ui(5, True)
+
             else:
-                tab = TabbedPanelItem(text=f"BOX {i-3}")
-            self.tabs.append(tab)
-
-            tab_layout = FloatLayout(size=(600, 150))
+                print("other ...")
+            self.temp_tabs[int(name[-1])-1].add_widget(self.temp_tab_layout)
             
-            active_checkbox = None
-            max_text_input = None
-            min_text_input= None
-            active_label = Label(text=f"Active", size_hint=(None, None), size=(100, 30), pos=(180, 70))
+        except Exception as e:
+            print(f"Temp TAB Create error {traceback.format_exc()}")
             
-            if i == 1 :
-                active_checkbox = CheckBox(size_hint=(None, None), size=(30, 30), pos=(250, 70), active = True if self.info['SPOT1_ACTIVE'] == 'true' else False)
-                x_text_input = TextInput(hint_text=f"1~80", size_hint=(None, None), size=(50, 30), pos=(320, 70), text = self.info['SPOT1_X'])
-                y_text_input = TextInput(hint_text=f"1~60", size_hint=(None, None), size=(50, 30), pos=(460, 70), text = self.info['SPOT1_Y'])
-                min_text_input = TextInput(hint_text=f"MIN", size_hint=(None, None), size=(50, 30), pos=(660, 70), text = self.info['SPOT1_MIN'])        
-                max_text_input = TextInput(hint_text=f"MAX", size_hint=(None, None), size=(50, 30), pos=(660, 30), text = self.info['SPOT1_MAX'])        
-                
-                
-            elif i == 2 :
-                active_checkbox = CheckBox(size_hint=(None, None), size=(30, 30), pos=(250, 70), active= True if self.info['SPOT2_ACTIVE'] == 'true' else False)
-                x_text_input = TextInput(hint_text=f"1~80", size_hint=(None, None), size=(50, 30), pos=(320, 70), text = self.info['SPOT2_X'])
-                y_text_input = TextInput(hint_text=f"1~60", size_hint=(None, None), size=(50, 30), pos=(460, 70), text = self.info['SPOT2_Y'])
-                min_text_input = TextInput(hint_text=f"MIN", size_hint=(None, None), size=(50, 30), pos=(660, 70), text = self.info['SPOT2_MIN'])        
-                max_text_input = TextInput(hint_text=f"MAX", size_hint=(None, None), size=(50, 30), pos=(660, 30), text = self.info['SPOT2_MAX'])
-                                
-            elif i == 3 :
-                active_checkbox = CheckBox(size_hint=(None, None), size=(30, 30), pos=(250, 70), active= True if self.info['SPOT3_ACTIVE'] == 'true' else False)
-                x_text_input = TextInput(hint_text=f"1~80", size_hint=(None, None), size=(50, 30), pos=(320, 70), text = self.info['SPOT3_X'])
-                y_text_input = TextInput(hint_text=f"1~60", size_hint=(None, None), size=(50, 30), pos=(460, 70), text = self.info['SPOT3_Y'])
-                min_text_input = TextInput(hint_text=f"MIN", size_hint=(None, None), size=(50, 30), pos=(660, 70), text = self.info['SPOT3_MIN'])        
-                max_text_input = TextInput(hint_text=f"MAX", size_hint=(None, None), size=(50, 30), pos=(660, 30), text = self.info['SPOT3_MAX'])
-                
-            elif i == 4 :
-                active_checkbox = CheckBox(size_hint=(None, None), size=(30, 30), pos=(250, 70), active= True if self.info['BOX1_ACTIVE'] == 'true' else False)
-                x_text_input = TextInput(hint_text=f"1~80", size_hint=(None, None), size=(50, 30), pos=(320, 70), text = self.info['BOX1_X'])
-                y_text_input = TextInput(hint_text=f"1~60", size_hint=(None, None), size=(50, 30), pos=(460, 70), text = self.info['BOX1_Y'])
-                min_text_input = TextInput(hint_text=f"MIN", size_hint=(None, None), size=(50, 30), pos=(660, 70), text = self.info['BOX1_MIN'])        
-                max_text_input = TextInput(hint_text=f"MAX", size_hint=(None, None), size=(50, 30), pos=(660, 30), text = self.info['BOX1_MAX'])
-                
-            elif i == 5 :
-                active_checkbox = CheckBox(size_hint=(None, None), size=(30, 30), pos=(250, 70), active= True if self.info['BOX2_ACTIVE'] == 'true' else False)
-                x_text_input = TextInput(hint_text=f"1~80", size_hint=(None, None), size=(50, 30), pos=(320, 70), text = self.info['BOX2_X'])
-                y_text_input = TextInput(hint_text=f"1~60", size_hint=(None, None), size=(50, 30), pos=(460, 70), text = self.info['BOX2_Y'])
-                min_text_input = TextInput(hint_text=f"MIN", size_hint=(None, None), size=(50, 30), pos=(660, 70), text = self.info['BOX2_MIN'])        
-                max_text_input = TextInput(hint_text=f"MAX", size_hint=(None, None), size=(50, 30), pos=(660, 30), text = self.info['BOX2_MAX'])
-                
-            elif i == 6 :
-                active_checkbox = CheckBox(size_hint=(None, None), size=(30, 30), pos=(250, 70), active= True if self.info['BOX3_ACTIVE'] == 'true' else False)
-                x_text_input = TextInput(hint_text=f"1~80", size_hint=(None, None), size=(50, 30), pos=(320, 70), text = self.info['BOX3_X'])
-                y_text_input = TextInput(hint_text=f"1~60", size_hint=(None, None), size=(50, 30), pos=(460, 70), text = self.info['BOX3_Y'])
-                min_text_input = TextInput(hint_text=f"MIN", size_hint=(None, None), size=(50, 30), pos=(660, 70), text = self.info['BOX3_MIN'])        
-                max_text_input = TextInput(hint_text=f"MAX", size_hint=(None, None), size=(50, 30), pos=(660, 30), text = self.info['BOX3_MAX'])
-                                
-            x_label = Label(text=f"X", size_hint=(None, None), size=(100, 30), pos=(250, 70))
-            y_label = Label(text=f"Y", size_hint=(None, None), size=(100, 30), pos=(370, 70))
-            min_label = Label(text=f"MIN", size_hint=(None, None), size=(100, 30), pos=(580, 70))            
-            max_label = Label(text=f"MAX", size_hint=(None, None), size=(100, 30), pos=(580, 30))
+        return self.temp_tab_layout
+        
 
-            width_text_input = None
-            height_text_input = None
-            width_label = None
-            height_label = None
-            
-            if i == 4 :
-                width_label = Label(text=f"WIDTH", size_hint=(None, None), size=(100, 30), pos=(240, 30))
-                width_text_input = TextInput(hint_text=f"1~60", size_hint=(None, None), size=(50, 30), pos=(320, 30), text = self.info['BOX1_W'])
-                height_label = Label(text=f"HEIGHT", size_hint=(None, None), size=(100, 30), pos=(370, 30))
-                height_text_input = TextInput(hint_text=f"1~40", size_hint=(None, None), size=(50, 30), pos=(460, 30), text = self.info['BOX1_H'])
-                tab_layout.add_widget(width_label)
-                tab_layout.add_widget(width_text_input)
-                tab_layout.add_widget(height_label)
-                tab_layout.add_widget(height_text_input)
-                
-            elif i == 5:        
-                width_label = Label(text=f"WIDTH", size_hint=(None, None), size=(100, 30), pos=(240, 30))
-                width_text_input = TextInput(hint_text=f"1~60", size_hint=(None, None), size=(50, 30), pos=(320, 30), text = self.info['BOX2_W'])
-                height_label = Label(text=f"HEIGHT", size_hint=(None, None), size=(100, 30), pos=(370, 30))
-                height_text_input = TextInput(hint_text=f"1~40", size_hint=(None, None), size=(50, 30), pos=(460, 30), text = self.info['BOX2_H'])
-                tab_layout.add_widget(width_label)
-                tab_layout.add_widget(width_text_input)
-                tab_layout.add_widget(height_label)
-                tab_layout.add_widget(height_text_input)
+    def create_widget(self):
+        temp_tabs = self.create_tempature_widget()
+        self.layout.add_widget(temp_tabs)
 
-            elif i == 6:
-                width_label = Label(text=f"WIDTH", size_hint=(None, None), size=(100, 30), pos=(240, 30))
-                width_text_input = TextInput(hint_text=f"1~60", size_hint=(None, None), size=(50, 30), pos=(320, 30), text = self.info['BOX3_W'])        
-                height_label = Label(text=f"HEIGHT", size_hint=(None, None), size=(100, 30), pos=(370, 30))
-                height_text_input = TextInput(hint_text=f"1~40", size_hint=(None, None), size=(50, 30), pos=(460, 30), text = self.info['BOX3_H'])
-                tab_layout.add_widget(width_label)
-                tab_layout.add_widget(width_text_input)
-                tab_layout.add_widget(height_label)
-                tab_layout.add_widget(height_text_input)
-                
-                
-                
-                
-            send_button = Button(
+        setting_tabs = self.create_setting_tab()
+        self.layout.add_widget(setting_tabs)
+
+        chart_tabs = self.create_chart_widget()
+        self.layout.add_widget(chart_tabs)
+
+
+    def make_temptab_ui(self, index, box = False):
+        self.width_text_input = None
+        self.height_text_input = None
+        keys = self.sub_info[index]
+        std_x = 1000
+        std_y = 930 - 715
+        self.active_label = Label(text=f"Active", size_hint=(None, None), size=(100, 30), pos = (std_x, std_y))
+        self.x_label = Label(text=f"X", size_hint=(None, None), size=(100, 30), pos = (std_x + 80, std_y))
+        self.y_label = Label(text=f"Y", size_hint=(None, None),size=(100, 30), pos=(std_x + 80, std_y - 50))
+        self.min_label = Label(text=f"MIN", size_hint=(None, None), size=(100, 30), pos=(std_x + 400, std_y)) 
+        self.max_label = Label(text=f"MAX", size_hint=(None, None), size=(100, 30), pos=(std_x + 400, std_y - 50))
+        
+        self.temp_tab_layout.add_widget(self.active_label)
+        self.temp_tab_layout.add_widget(self.x_label)
+        self.temp_tab_layout.add_widget(self.y_label)
+        self.temp_tab_layout.add_widget(self.min_label)
+        self.temp_tab_layout.add_widget(self.max_label)
+
+        self.active_checkbox = CheckBox(size_hint=(None, None), size=(30, 30), pos=(std_x + 80 , std_y), active = True if self.info[keys[0]] == 'true' else False)
+        self.x_text_input = TextInput(hint_text=f"1~80", size_hint=(None, None), size=(50, 30), pos=(std_x + 150, std_y), text = self.info[keys[1]])
+        self.y_text_input = TextInput(hint_text=f"1~60", size_hint=(None, None), size=(50, 30), pos=(std_x + 150, std_y - 50), text = self.info[keys[2]])
+        self.min_text_input = TextInput(hint_text=f"MIN", size_hint=(None, None), size=(50, 30), pos=(std_x + 490, std_y), text = self.info[keys[3]])        
+        self.max_text_input = TextInput(hint_text=f"MAX", size_hint=(None, None), size=(50, 30), pos=(std_x + 490, std_y - 50), text = self.info[keys[4]])
+        self.temp_tab_layout.add_widget(self.active_checkbox)
+        self.temp_tab_layout.add_widget(self.x_text_input)
+        self.temp_tab_layout.add_widget(self.y_text_input)
+        self.temp_tab_layout.add_widget(self.min_text_input)
+        self.temp_tab_layout.add_widget(self.max_text_input)
+        
+
+        if box == True:
+            self.width_label = Label(text=f"WIDTH", size_hint=(None, None), size=(100, 30), pos=(std_x + 190, std_y)) 
+            self.height_label = Label(text=f"HEIGHT", size_hint=(None, None), size=(100, 30), pos=(std_x + 190, std_y - 50))
+            self.height_text_input = TextInput(hint_text=f"1~40", size_hint=(None, None), size=(50, 30), pos=(std_x + 280, std_y ), text = self.info[keys[6]])
+            self.width_text_input = TextInput(hint_text=f"1~60", size_hint=(None, None), size=(50, 30), pos=(std_x + 280, std_y - 50), text = self.info[keys[5]])
+            self.temp_tab_layout.add_widget(self.width_label)
+            self.temp_tab_layout.add_widget(self.height_label)
+            self.temp_tab_layout.add_widget(self.width_text_input)
+            self.temp_tab_layout.add_widget(self.height_text_input)
+        
+        
+        send_button = Button(
                 text='SEND',
                 font_size=15,
                 size_hint=(None, None),
                 size=(60, 60),
-                pos=(530, 35)
+                pos=(std_x + 350, std_y - 40)
             )
+        
+        send_button.bind(
+            on_release=lambda instance, 
+                        tab_name = index,
+                        active_text=self.active_checkbox, 
+                        x_text=self.x_text_input,
+                        y_text=self.y_text_input,
+                        width_text=self.width_text_input, 
+                        height_text=self.height_text_input:
+                        self.send_coordi_callback(instance, tab_name, active_text, x_text, y_text, width_text, height_text))
+        
 
-            apply_button = Button(
+        apply_button = Button(
                 text='APPLY',
                 font_size=15,
                 size_hint=(None, None),
                 size=(60, 60),
-                pos=(730, 35)
+                pos=(std_x + 550, std_y - 40)
             )
-            
-            
-            send_button.bind(
+        
+
+        apply_button.bind(
                 on_release=lambda instance, 
-                            tab_name=f"TAB {i}",
-                            active_text=active_checkbox, 
-                            x_text=x_text_input,
-                            y_text=y_text_input,
-                            width_text=width_text_input, 
-                            height_text=height_text_input:
-                            self.send_coordi_callback(instance, tab_name, active_text, x_text, y_text, width_text, height_text))
+                            tab_name= index, 
+                            max_temp=self.max_text_input, 
+                            min_temp=self.min_text_input,:
+                            self.send_temp_callback(instance, index, min_temp, max_temp))
+
+        self.temp_tab_layout.add_widget(send_button)
+        self.temp_tab_layout.add_widget(apply_button)
+        print("Make Temp UI Complete")
+        
+    
+    def send_coordi_callback(self, instance, tab_number, active_checkbox, x_text, y_text, width_text=None, height_text=None):
+        active_value = 'true' if active_checkbox.active else 'false'
+        try:
+            x_value = x_text.text
+            y_value = y_text.text
+            width_value = width_text.text if width_text else ""
+            height_value = height_text.text if height_text else ""
+            if width_value and height_value:
+                self.send_coordi_info(tab_number, active_value, x_value, y_value, width_value, height_value)
+                print(f"{tab_number} - Active: {active_value}, X: {x_value}, Y: {y_value}, Width: {width_value}, Height: {height_value}")
+            else:
+                self.send_coordi_info(tab_number, active_value, x_value, y_value)
+                print(f"{tab_number} - Active: {active_value}, X: {x_value}, Y: {y_value}")
+        except ValueError:
+            print('invalid value')
+            logger.error('invalid value')
             
-            apply_button.bind(
-                on_release=lambda instance, 
-                            tab_name=f"TAB {i}",
-                            max_temp=max_text_input, 
-                            min_temp=min_text_input,:
-                            self.send_temp_callback(instance, tab_name, min_temp, max_temp))
+
+
+    def send_temp_callback(self, instance, tab_name, min_temp, max_temp):
+        min_value = min_temp.text
+        max_value = max_temp.text
+        self.send_temp_info(tab_name, min_value, max_value)
+
+
+    def send_temp_info(self, tab_name, min_value, max_value):
+        if tab_name == 0:
+            self.info['SPOT1_MIN'] = min_value
+            self.info['SPOT1_MAX'] = max_value
+            print(f"SPOT1_MIN = {min_value}")
+            print(f"SPOT1_MAX = {max_value}")
+
+
+        elif tab_name == 1:
+            self.info['SPOT2_MIN'] = min_value
+            self.info['SPOT2_MAX'] = max_value
+            print(f"SPOT2_MIN = {min_value}")
+            print(f"SPOT2_MAX = {max_value}")
+        
+
+        elif tab_name == 2:
+            self.info['SPOT3_MIN'] = min_value
+            self.info['SPOT3_MAX'] = max_value
+            print(f"SPOT3_MIN = {min_value}")
+            print(f"SPOT3_MAX = {max_value}")
+        
+
+        elif tab_name == 3:
+            self.info['BOX1_MIN'] = min_value
+            self.info['BOX1_MAX'] = max_value
+            print(f"BOX1_MIN = {min_value}")
+            print(f"BOX1_MAX = {max_value}")
+
+
+        elif tab_name == 4:
+            self.info['BOX2_MIN'] = min_value
+            self.info['BOX2_MAX'] = max_value
+            print(f"BOX2_MIN = {min_value}")
+            print(f"BOX2_MAX = {max_value}")
+
+
+        elif tab_name == 5:
+            self.info['BOX3_MIN'] = min_value
+            self.info['BOX3_MAX'] = max_value
+            print(f"BOX3_MIN = {min_value}")
+            print(f"BOX3_MAX = {max_value}")
+
+
+        else:
+            print("invalid TAB!")
+            pass
+        
+
+    def send_coordi_info(self, tab_number, active_value, x_value, y_value, width_value = None, height_value= None):
+        if tab_number == 0: # spot1
+            active_url = self.api.make_url(self.rest_url['SPOT1_ACTIVE'], True, active_value) 
+            result = self.api.set_camera_value(active_url) 
+            self.info['SPOT1_ACTIVE'] = active_value
+
+            X_url = self.api.make_url(self.rest_url['SPOT1_X'], True, x_value) 
+            result = self.api.set_camera_value(X_url) 
+            self.info['SPOT1_X'] = x_value
+
+            Y_url = self.api.make_url(self.rest_url['SPOT1_Y'], True, y_value) 
+            result = self.api.set_camera_value(Y_url) 
+            self.info['SPOT1_Y'] = y_value
+
+            if width_value and height_value:
+                self.info ['SPOT1_W'] = width_value
+                self.info ['SPOT1_h'] = height_value
+
+        elif tab_number == 1: # spot2
+            active_url = self.api.make_url(self.rest_url['SPOT2_ACTIVE'], True, active_value) 
+            result = self.api.set_camera_value(active_url) 
+            self.info['SPOT2_ACTIVE'] = active_value
+
+            X_url = self.api.make_url(self.rest_url['SPOT2_X'], True, x_value) 
+            result = self.api.set_camera_value(X_url) 
+            self.info['SPOT2_X'] = x_value
+
+            Y_url = self.api.make_url(self.rest_url['SPOT2_Y'], True, y_value) 
+            result = self.api.set_camera_value(Y_url) 
+            self.info['SPOT2_Y'] = y_value
+
+            if width_value and height_value:
+                self.info ['SPOT2_W'] = width_value
+                self.info ['SPOT2_h'] = height_value
+
+            
+        elif tab_number == 2: # spot3
+            active_url = self.api.make_url(self.rest_url['SPOT3_ACTIVE'], True, active_value) 
+            result = self.api.set_camera_value(active_url) 
+            self.info['SPOT3_ACTIVE'] = active_value
+
+            X_url = self.api.make_url(self.rest_url['SPOT3_X'], True, x_value) 
+            result = self.api.set_camera_value(X_url) 
+            self.info['SPOT3_X'] = x_value
+
+            Y_url = self.api.make_url(self.rest_url['SPOT3_Y'], True, y_value) 
+            result = self.api.set_camera_value(Y_url) 
+            self.info['SPOT3_Y'] = y_value
+
+            if width_value and height_value:
+                self.info ['SPOT3_W'] = width_value
+                self.info ['SPOT3_h'] = height_value
+            
+        elif tab_number == 3: # box1
+            active_url = self.api.make_url(self.rest_url['BOX1_ACTIVE'], True, active_value) 
+            result = self.api.set_camera_value(active_url) 
+            self.info['BOX1_ACTIVE'] = active_value
+
+            X_url = self.api.make_url(self.rest_url['BOX1_X'], True, x_value) 
+            result = self.api.set_camera_value(X_url) 
+            self.info['BOX1_X'] = x_value
+
+            Y_url = self.api.make_url(self.rest_url['BOX1_Y'], True, y_value) 
+            result = self.api.set_camera_value(Y_url) 
+            self.info['BOX1_Y'] = y_value
+        
+            if width_value and height_value:
+                # width 
+                width_url = self.api.make_url(self.rest_url['BOX1_W'], True, width_value) 
+                result = self.api.set_camera_value(width_url) 
+                self.info ['BOX1_W'] = width_value
+
+                # height
+                height_url = self.api.make_url(self.rest_url['BOX1_H'], True, height_value) 
+                result = self.api.set_camera_value(height_url) 
+                self.info ['BOX1_H'] = height_value
+            
+        elif tab_number == 4:
+            active_url = self.api.make_url(self.rest_url['BOX2_ACTIVE'], True, active_value) 
+            result = self.api.set_camera_value(active_url) 
+            self.info['BOX2_ACTIVE'] = active_value
+
+            X_url = self.api.make_url(self.rest_url['BOX2_X'], True, x_value) 
+            result = self.api.set_camera_value(X_url) 
+            self.info['BOX2_X'] = x_value
+
+            Y_url = self.api.make_url(self.rest_url['BOX2_Y'], True, y_value) 
+            result = self.api.set_camera_value(Y_url) 
+            self.info['BOX2_Y'] = y_value
+        
+            if width_value and height_value:
+                # width 
+                width_url = self.api.make_url(self.rest_url['BOX2_W'], True, width_value) 
+                result = self.api.set_camera_value(width_url) 
+                self.info ['BOX2_W'] = width_value
+
+                # height
+                height_url = self.api.make_url(self.rest_url['BOX2_H'], True, height_value) 
+                result = self.api.set_camera_value(height_url) 
+                self.info ['BOX2_H'] = height_value
+
+            
+        elif tab_number == 5: # box3
+            active_url = self.api.make_url(self.rest_url['BOX3_ACTIVE'], True, active_value) 
+            result = self.api.set_camera_value(active_url) 
+            self.info['BOX3_ACTIVE'] = active_value
+
+            X_url = self.api.make_url(self.rest_url['BOX3_X'], True, x_value) 
+            result = self.api.set_camera_value(X_url) 
+            self.info['BOX3_X'] = x_value
+
+            Y_url = self.api.make_url(self.rest_url['BOX3_Y'], True, y_value) 
+            result = self.api.set_camera_value(Y_url) 
+            self.info['BOX3_Y'] = y_value
+        
+            if width_value and height_value:
+                # width 
+                width_url = self.api.make_url(self.rest_url['BOX3_W'], True, width_value) 
+                result = self.api.set_camera_value(width_url) 
+                self.info ['BOX3_W'] = width_value
+
+                # height
+                height_url = self.api.make_url(self.rest_url['BOX3_H'], True, height_value) 
+                result = self.api.set_camera_value(height_url) 
+                self.info ['BOX3_H'] = height_value
+
+
+#setting tab
+#==========================================================================================
+    def create_setting_tab(self):
+        panel_pos = (310,5)
+        self.std_x = panel_pos[0] + 20
+        self.std_y = panel_pos[1] + 135
+
+        setting_panel = TabbedPanel(size_hint=(None, None), size=(700, 300), pos = panel_pos, do_default_tab=False)
+        setting_tab = TabbedPanelHeader(text='Palette')
+        mode_tab = TabbedPanelHeader(text='Camera\nMode')
+        led_tab = TabbedPanelHeader(text='LED')
+        save_tab = TabbedPanelHeader(text='Save')
+        overlay_tab = TabbedPanelHeader(text='Overlay')
+        web_tab = TabbedPanelHeader(text='Open\nWebsite')
+        global_tab = TabbedPanelHeader(text='Global\nParameter')
+
+        setting_tab.content = self.create_setting_content('Palette')
+        mode_tab.content = self.create_setting_content('Mode')
+        led_tab.content = self.create_setting_content('LED')
+        save_tab.content = self.create_setting_content('Save')
+        overlay_tab.content = self.create_setting_content('Overlay')
+        web_tab.content = self.create_setting_content('Website')
+        global_tab.content = self.create_setting_content('Global_parameter')
+
+        setting_panel.add_widget(setting_tab)
+        setting_panel.add_widget(mode_tab)
+        setting_panel.add_widget(led_tab)
+        setting_panel.add_widget(save_tab)
+        setting_panel.add_widget(overlay_tab)
+        setting_panel.add_widget(web_tab)
+        setting_panel.add_widget(global_tab)
+
+        return setting_panel
+    
+
+    def create_setting_content(self, name):
+        setting_tab_layout = FloatLayout(size=(600, 150))
+
+        if name in 'Palette':
+            self.arctic_button = Button(text="arctic",size=(80, 80),  
+            size_hint = (None,None),
+            pos=(self.std_x, self.std_y),
+            color=(1, 1, 1, 1)
+            )
+            setting_tab_layout.add_widget(self.arctic_button)
+            self.arctic_button.bind(on_press=self.palette_button_pressed)
+
+            self.bw_button = Button(text="bw",size=(80, 80),  
+            size_hint = (None,None),
+            pos=(self.std_x + (80 * 1 + 10 * 1), self.std_y),
+            color=(1, 1, 1, 1)
+            )
+            setting_tab_layout.add_widget(self.bw_button)
+            self.bw_button.bind(on_press=self.palette_button_pressed)
+
+
+            self.iron_button = Button(text="iron",size=(80, 80),  
+            size_hint = (None,None),
+            pos=(self.std_x + (80 * 2 + 10 * 2), self.std_y),
+            color=(1, 1, 1, 1)
+            )
+            setting_tab_layout.add_widget(self.iron_button)
+            self.iron_button.bind(on_press=self.palette_button_pressed)
+
+            self.lava_button = Button(text="lava",size=(80, 80),  
+            size_hint = (None,None),
+            pos=(self.std_x + (80 * 3 + 10 * 3), self.std_y),
+            color=(1, 1, 1, 1)
+            )
+            setting_tab_layout.add_widget(self.lava_button)
+            self.lava_button.bind(on_press=self.palette_button_pressed)
+
+            self.rainbow_button = Button(text="rainbow",size=(80, 80),  
+            size_hint = (None,None),
+            pos=(self.std_x + (80 * 4 + 10 * 4), self.std_y),
+            color=(1, 1, 1, 1)
+            )
+            setting_tab_layout.add_widget(self.rainbow_button)
+            self.rainbow_button.bind(on_press=self.palette_button_pressed)
+
+            self.rainHC_button = Button(text="rainHC",size=(80, 80),  
+            size_hint = (None,None),
+            pos=(self.std_x + (80 * 5 + 10 * 5), self.std_y),
+            color=(1, 1, 1, 1)
+            )
+            setting_tab_layout.add_widget(self.rainHC_button)
+            self.rainHC_button.bind(on_press=self.palette_button_pressed)
+
+
+        elif name in 'Mode':
+            self.msx_button = Button(text="MSX",size=(80, 80),  
+            size_hint = (None,None),
+            pos=(self.std_x, self.std_y),
+            color=(1, 1, 1, 1)
+            )
+            setting_tab_layout.add_widget(self.msx_button)
+
+            self.Visual_button = Button(text="Visual",size=(80, 80),  
+            size_hint = (None,None),
+            pos=(self.std_x + (80 * 1 + 10 * 1), self.std_y),
+            color=(1, 1, 1, 1)
+            )
+            setting_tab_layout.add_widget(self.Visual_button)
+
+ 
+            self.Visual_button.bind(on_press = self.camera_mode_change)
+            self.msx_button.bind(on_press = self.camera_mode_change)
+
+
+        elif name in 'LED':
+            self.led_on_button = Button(text="ON",size=(80, 80),  
+            size_hint = (None,None),
+            pos=(self.std_x, self.std_y),
+            color=(1, 1, 1, 1)
+            )
+            setting_tab_layout.add_widget(self.led_on_button)
+
+            self.led_off_button = Button(text="OFF",size=(80, 80),  
+            size_hint = (None,None),
+            pos=(self.std_x + (80 * 1 + 10 * 1), self.std_y),
+            color=(1, 1, 1, 1)
+            )
+            setting_tab_layout.add_widget(self.led_off_button)
+            self.led_on_button.bind(on_press = self.led_button_active)
+            self.led_off_button.bind(on_press = self.led_button_active)
+
+
+        elif name in 'Save':
+            self.snapshot_button = Button(text="    Save\nSnapshot",size=(100, 80),  
+            size_hint = (None,None),
+            pos=(self.std_x, self.std_y),
+            color=(1, 1, 1, 1)
+            )
+            setting_tab_layout.add_widget(self.snapshot_button)
+
+            self.savedata_button = Button(text="      Save\nTemperature",size=(100, 80),  
+            size_hint = (None,None),
+            pos=(self.std_x + (100 * 1 + 10 * 1), self.std_y),
+            color=(1, 1, 1, 1)
+            )
+            setting_tab_layout.add_widget(self.savedata_button)
+            self.savedata_button.bind(on_release=self.save_data_popup)
+
+
+        elif name in 'Overlay':
+            self.overlay_on_button = Button(text="ON",size=(80, 80),  
+            size_hint = (None,None),
+            pos=(self.std_x, self.std_y),
+            color=(1, 1, 1, 1)
+            )
+            setting_tab_layout.add_widget(self.overlay_on_button)
+
+            self.overlay_off_button = Button(text="OFF",size=(80, 80),  
+            size_hint = (None,None),
+            pos=(self.std_x + (80 * 1 + 10 * 1), self.std_y),
+            color=(1, 1, 1, 1)
+            )
+            setting_tab_layout.add_widget(self.overlay_off_button)
+
+            self.overlay_on_button.bind(on_press = self.overlay_button_active)
+            self.overlay_off_button.bind(on_press = self.overlay_button_active)
+
+
+        elif name in 'Website':
+            self.website_button = Button(text="Open Website",size=(200, 80),  
+            size_hint = (None,None),
+            pos=(self.std_x, self.std_y),
+            color=(1, 1, 1, 1)
+            )
+            self.website_button.bind(on_release = self.open_internal_website)
+            setting_tab_layout.add_widget(self.website_button)
+
+
+        elif name in "Global_parameter":
+            self.Emissivity = Label(text=f"Emissivity(%)", size_hint=(None, None), size=(150, 30), pos=(self.std_x + 30 , self.std_y + 80))
+            self.RT = Label(text=f"Reflected temperature(C)", size_hint=(None, None), size=(150, 30), pos=(self.std_x + 30 , self.std_y + 30))
+            self.RH = Label(text=f"Relative humidity(%)", size_hint=(None, None),size=(150, 30), pos=(self.std_x + 30 , self.std_y - 20))
+            self.AT = Label(text=f"Atmospheric temperature(C)", size_hint=(None, None), size=(150, 30), pos=(self.std_x + 30 , self.std_y - 70))
+            self.Distance = Label(text=f"Distance(M)", size_hint=(None, None), size=(150, 30), pos=(self.std_x + 310 , self.std_y + 80))
+            self.EIR = Label(text=f"External IR window(On/Off)", size_hint=(None, None), size=(150, 30), pos=(self.std_x + 310 , self.std_y + 30))
+            self.T = Label(text=f"Temperature(C)", size_hint=(None, None), size=(150, 30), pos=(self.std_x + 310 , self.std_y - 20))
+            self.TM = Label(text=f"Transmission(%)", size_hint=(None, None), size=(150, 30), pos=(self.std_x + 310 , self.std_y - 70))
+
+            self.Emissivity_text_input = TextInput(hint_text=f"%", size_hint=(None, None), size=(80, 30), pos=(self.std_x + 205 , self.std_y + 80), text = self.info['GLOBAL_EMISS'])
+            self.RT_text_input = TextInput(hint_text=f"C", size_hint=(None, None), size=(80, 30), pos=(self.std_x + 205 , self.std_y + 30), text = self.info['GLOBAL_RT'])
+            self.RH_text_input = TextInput(hint_text=f"%", size_hint=(None, None), size=(80, 30), pos=(self.std_x + 205 , self.std_y - 20), text = self.info['GLOBAL_RH'])
+            self.AT_text_input = TextInput(hint_text=f"C", size_hint=(None, None), size=(80, 30), pos=(self.std_x + 205 , self.std_y - 70), text = self.info['GLOBAL_AT'])
+            self.Distance_text_input = TextInput(hint_text=f"m", size_hint=(None, None), size=(80, 30), pos=(self.std_x + 480 , self.std_y + 80), text = self.info['GLOBAL_OD'])
+            self.EIR_text_input = TextInput(hint_text=f"on/off", size_hint=(None, None), size=(80, 30), pos=(self.std_x + 480 , self.std_y + 30), text = self.info['GLOBAL_EIRW'])
+            self.T_text_input = TextInput(hint_text=f"C", size_hint=(None, None), size=(80, 30), pos=(self.std_x + 480 , self.std_y - 20), text = self.info['GLOBAL_TEMP'])
+            self.TM_text_input = TextInput(hint_text=f"%", size_hint=(None, None), size=(80, 30), pos=(self.std_x + 480 , self.std_y - 70), text = self.info['GLOBAL_TRS'])
+            
+            setting_tab_layout.add_widget(self.Emissivity)
+            setting_tab_layout.add_widget(self.RT)
+            setting_tab_layout.add_widget(self.RH)
+            setting_tab_layout.add_widget(self.AT)
+            setting_tab_layout.add_widget(self.Distance)
+            setting_tab_layout.add_widget(self.EIR)
+            setting_tab_layout.add_widget(self.T)
+            setting_tab_layout.add_widget(self.TM)
+
+            self.global_button = Button(text="SEND",size=(80, 80),  
+                                        size_hint = (None,None),
+                                        pos=(self.std_x + 590 , self.std_y - 80),
+                                        color=(1, 1, 1, 1)
+                                        )
+
+            self.global_button.bind(
+            on_release=lambda instance, 
+                        Emissivity = self.Emissivity_text_input.text,
+                        RT=self.RT_text_input.text, 
+                        RH=self.RH_text_input.text,
+                        AT=self.AT_text_input.text,
+                        Distance=self.Distance_text_input.text, 
+                        EIR=self.EIR_text_input.text,
+                        T = self.T_text_input.text,
+                        TM = self.TM_text_input.text:
+                        self.send_global_callback(instance, Emissivity, RT, RH, AT, Distance, EIR, T, TM))
             
 
-            tab_layout.add_widget(x_label)
-            tab_layout.add_widget(x_text_input)
-            tab_layout.add_widget(y_label)
-            tab_layout.add_widget(y_text_input)
-            tab_layout.add_widget(max_label)
-            tab_layout.add_widget(min_label)
-            tab_layout.add_widget(max_text_input)
-            tab_layout.add_widget(min_text_input)
-            tab_layout.add_widget(active_checkbox)
-            tab_layout.add_widget(active_label)
-            tab_layout.add_widget(send_button)
-            tab_layout.add_widget(apply_button)
+            setting_tab_layout.add_widget(self.Emissivity_text_input)
+            setting_tab_layout.add_widget(self.RT_text_input)
+            setting_tab_layout.add_widget(self.RH_text_input)
+            setting_tab_layout.add_widget(self.AT_text_input)
+            setting_tab_layout.add_widget(self.Distance_text_input)
+            setting_tab_layout.add_widget(self.EIR_text_input)
+            setting_tab_layout.add_widget(self.T_text_input)
+            setting_tab_layout.add_widget(self.TM_text_input)
+            setting_tab_layout.add_widget(self.global_button)
             
-            tab.add_widget(tab_layout)
-            self.tabbed_panel.add_widget(tab)
+            
+        else:
+            print("invalid name")
+        print("Make Setting Tab Complete")
+        logger.info("Make Setting Tab Complete")
+
+        return setting_tab_layout
 
 
-        # layout make widget
-        self.layout.add_widget(self.led_text)
-        self.layout.add_widget(self.led_button)
-        self.layout.add_widget(self.overlay_text)
-        self.layout.add_widget(self.overlay_button)
-        self.layout.add_widget(self.setting_text)
-        self.layout.add_widget(self.saveimg_button)
-        self.layout.add_widget(self.savedata_button)
-        self.layout.add_widget(self.camera_mode_text)
-        self.layout.add_widget(self.camera_palette_text)
-        self.layout.add_widget(self.tabbed_panel)
-        self.layout.add_widget(web_button)
-        for i in range(3):
-            self.layout.add_widget(self.mode_toggle_group[i])
-        for i in range(6):
-            self.layout.add_widget(self.palette_toggle_group[i])
-        self.layout.add_widget(self.mode_select_button)
-        self.layout.add_widget(self.palette_select_button)            
-        web_button.bind(on_press=self.open_internal_website)
-        self.led_button.bind(on_release = self.led_button_active)
-        self.overlay_button.bind(on_release = self.overlay_button_active)
-        self.mode_select_button.bind(on_release = self.camera_mode_change)
-        self.palette_select_button.bind(on_release = self.palette_change)
-        self.savedata_button.bind(on_release=self.save_data_popup)
+    def send_global_callback(self, instance, Emissivity, RT, RH, AT, Distance, EIR, T, TM):
+        Emissivity_url = self.api.make_url(self.rest_url['GLOBAL_EMISS'], True, Emissivity) 
+        result = self.api.set_camera_value(Emissivity_url) 
+        if result:
+            self.info['GLOBAL_EMISS'] = Emissivity
 
+        RT_url = self.api.make_url(self.rest_url['GLOBAL_RT'], True, RT) 
+        result = self.api.set_camera_value(RT_url) 
+
+        if result:
+            self.info['GLOBAL_RT'] = RT
+        else:
+            print(f"Send GLOBAL_RT Error")
+            logger.error(f"Send GLOBAL_RT Error")
+        
+        
+        RH_url = self.api.make_url(self.rest_url['GLOBAL_RH'], True, RH) 
+        result = self.api.set_camera_value(RH_url) 
+
+        if result:
+            self.info['GLOBAL_RH'] = RH
+        else:
+            print(f"Send GLOBAL_RH Error")
+            logger.error(f"Send GLOBAL_RH Error")
+
+
+        AT_url = self.api.make_url(self.rest_url['GLOBAL_AT'], True, AT) 
+        result = self.api.set_camera_value(AT_url)
+
+        if result:
+            self.info['GLOBAL_AT'] = AT
+        else:
+            print(f"Send GLOBAL_AT Error")
+            logger.error(f"Send GLOBAL_AT Error")
+
+
+        
+        OD_url = self.api.make_url(self.rest_url['GLOBAL_OD'], True, Distance) 
+        result = self.api.set_camera_value(OD_url) 
+
+        if result:
+            self.info['GLOBAL_OD'] = Distance
+            
+        else:
+            print(f"Send GLOBAL_OD Error")
+            logger.error(f"Send GLOBAL_OD Error")
+
+
+
+        EIR_url = self.api.make_url(self.rest_url['GLOBAL_EIRW'], True, EIR) 
+        result = self.api.set_camera_value(EIR_url) 
+
+        if result:
+            self.info['GLOBAL_EIRW'] = EIR
+
+        else:
+            print(f"Send GLOBAL_EIRW Error")
+            logger.error(f"Send GLOBAL_EIRW Error")
+
+        
+        T_url = self.api.make_url(self.rest_url['GLOBAL_TEMP'], True, T) 
+        result = self.api.set_camera_value(T_url) 
+
+        if result:
+            self.info['GLOBAL_TEMP'] = T
+
+        else:
+            print(f"Send GLOBAL_TEMP Error")
+            logger.error(f"Send GLOBAL_TEMP Error")
+
+
+        TM_url = self.api.make_url(self.rest_url['GLOBAL_TRS'], True, TM) 
+        result = self.api.set_camera_value(TM_url) 
+
+        if result:
+            self.info['GLOBAL_TRS'] = TM
+        else:
+            print(f"Send GLOBAL_TRS Error")
+            logger.error(f"Send GLOBAL_TRS Error")
+
+
+        return
+
+        
+
+
+
+
+
+
+    def palette_button_pressed(self, instance):
+        try:
+            name = instance.text
+            URL = self.api.make_url(['image','sysimg','palette','readFile'], True, name)
+            rst = self.api.set_camera_value(URL)
+            print(f"Change Palette : {name}")
+            logger.info(f"Change Palette : {name}")
+        except Exception as e:
+            print(f"change palette Error : {e}")
+            logger.error(f"change palette Error : {e}")
         
     def save_data_popup(self, instance):
         popup_layout = BoxLayout(orientation='vertical')
         self.save_toggle_group = []
-        # 토글 버튼 1, 2, 3, 4를 만들고 그룹에 추가
         toggle_button1 = ToggleButton(text='30 Seconds', group='toggle_group')
         toggle_button2 = ToggleButton(text='1 Minute', group='toggle_group')
         toggle_button3 = ToggleButton(text='5 Minutes', group='toggle_group')
@@ -379,14 +973,13 @@ class INITUI():
     
     # date write func
     def start_button_pressed(self, instance):
+
         self.start_time = time.time()
         self.data_selected = [btn.text for btn in self.save_toggle_group if btn.state == 'down']
-        print(f'Start button pressed. Selected: {", ".join(self.data_selected)}')
         for toggle_button in self.save_toggle_group:
                 toggle_button.disabled = True
                 self.data_toggle_lock = True
         self.start_button.disabled = True
-        print(self.data_selected)
         if self.data_selected == ["30 Seconds"]:
             self.interval = 30
             print("interval change 30")
@@ -401,6 +994,8 @@ class INITUI():
         else:
             print("not selected")
         self.data_write = True
+        print(f"temperature save start // interval {self.interval}")
+        logger.info(f"temperature save start // interval {self.interval}")
 
     # data write stop
     def stop_button_pressed(self, instance):
@@ -411,7 +1006,8 @@ class INITUI():
         self.save_trigger = True
         
 
-        print("Stop button pressed")
+        print("temperature save start")
+        logger.info("temperature save start")
 
 
     # etc func
@@ -420,345 +1016,67 @@ class INITUI():
         internal_ip_address = self.ip
         if not internal_ip_address.startswith('http://') and not internal_ip_address.startswith('https://'):
             internal_ip_address = 'http://' + internal_ip_address
-        print(f"internal_ip_address : {internal_ip_address}")
+        print(f"open website : {internal_ip_address}")
+        logger.info(f"open website : {internal_ip_address}")
         webbrowser.open(internal_ip_address)
     
     
-    
-    
-    def palette_button_release(self, instance):
-        selected_option_index = None
-        for index, button in enumerate(self.palette_toggle_group):
-            if button.state == 'down':
-                selected_option_index = index
-                break
-        if selected_option_index is not None:
-            self.selected_palette = self.palette_toggle_group[selected_option_index].text
-            print(f"선택된 옵션: {self.selected_palette}")
-        else:
-            print("선택된 옵션이 없습니다.")
-    
-    
-    def mode_button_release(self, instance):
-        selected_option_index = None
-        for index, button in enumerate(self.mode_toggle_group):
-            if button.state == 'down':
-                selected_option_index = index
-                break
-        if selected_option_index is not None:
-            self.selected_mode = self.mode_toggle_group[selected_option_index].text
-            print(f"선택된 옵션: {self.selected_mode}")
-        else:
-            print("선택된 옵션이 없습니다.")
-            
-            
     def camera_mode_change(self,instance):
         try:
-            value = None
+            value = instance.text
+            mode = 0
             data_list = ['image','sysimg','fusion','fusionData','fusionMode']
-            if self.selected_mode == "IR":
-                value = '1'
-            elif self.selected_mode == "Visual":
-                value = '2'
-            elif self.selected_mode == "MSX":
-                value = '3'
+            if value == "IR":
+                mode = '1'
+            elif value == "Visual":
+                mode = '2'
+            elif value == "MSX":
+                mode = '3'
             else:
                 pass
-            URL = self.api.make_url(data_list, True, value)
+            URL = self.api.make_url(data_list, True, mode)
             rst = self.api.set_camera_value(URL)
             print(f"change {self.selected_mode} Mode Complete{rst}")
+            logger.info(f"change {self.selected_mode} Mode Complete{rst}")
         except Exception as e:
             print(f"Cam Mode Change Error = {traceback.format_exc()}")
+            logger.error(f"Cam Mode Change Error = {traceback.format_exc()}")
 
 
-    def palette_change(self, instance):
-        try:
-            print(f"target palette : {self.selected_palette}.")
-            URL = self.api.make_url(['image','sysimg','palette','readFile'], True, self.selected_palette)
-            print(f"Result URL = {URL}")
-            rst = self.api.set_camera_value(URL)
-            print(f"CAM Palette Change {rst}")
-        except Exception as e:
-            print(f"Cam palette Change Error = {traceback.format_exc()}")
-            
-            
     def led_button_active(self, instance):
-        print("self.info['LED'] = {self.info['LED']}")
         if self.info['LED'] == 'false':
             self.info['LED'] = 'true'
             instance.text = "ON"
             # instance.color = (1, 0, 0, 1)
             URL = self.api.make_url(['system','vcam','torch'], True, 'true')
-            print(f"Result URL = {URL}")
             rst = self.api.set_camera_value(URL)
-            print(f"CAM LED ON {rst}")
+            print(f"CAM LED ON")
+            logger.info(f"CAM LED ON")
     
         else:
             instance.text = "OFF"
             self.info['LED'] = 'false'
             instance.color = (1, 1, 1, 1)
             URL = self.api.make_url(['system','vcam','torch'], True, 'false')
-            print(f"Result set URL = {URL}")
             rst = self.api.set_camera_value(URL)
-            print(f"CAM LED OFF {rst}")
+            print(f"CAM LED OFF")
+            logger.info(f"CAM LED OFF")
         
 
     # hideGraphics = true -> 숨김 / false가 overlay On
     def overlay_button_active(self, instance):
         if instance.text == "ON":
-            instance.text = "OFF"
-            URL = self.api.make_url(['resmon','config','hideGraphics'], True, 'true')
-            print(f"off url = {URL}")
-            rst = self.api.set_camera_value(URL)
-            print(f"CAM Overlay OFF {rst}")
+            for i in range(3):
+                URL = self.api.make_url(['resmon','config','hideGraphics'], True, 'false')
+                rst = self.api.set_camera_value(URL)
+                time.sleep(0.01)
+            print(f"CAM Overlay ON")
+            logger.info(f"CAM Overlay ON")
         else:
-            instance.text = "ON"
-            URL = self.api.make_url(['resmon','config','hideGraphics'], True, 'false')
-            print(f"on url = {URL}")
-            rst = self.api.set_camera_value(URL)
-            print(f"CAM Overlay OFF {rst}")
-            
-            
-    # 기능 2
-    def change_tab_text_color(self, tab_index, color_index):
-        if color_index == True:
-            color = (1, 1, 1, 1) # white
-        else:
-            color = (1, 0, 0, 1) # green
-        print(f"color = {color}")
-        if 1 <= tab_index <= len(self.tabs):
-            tab = self.tabs[tab_index]  
-            tab.color = color
-            
+            for i in range(3):
+                URL = self.api.make_url(['resmon','config','hideGraphics'], True, 'true')
+                rst = self.api.set_camera_value(URL)
+                time.sleep(0.01)
+            print(f"CAM Overlay OFF")
+            logger.info(f"CAM Overlay OFF")
 
-    
-    
-    def send_coordi_callback(self, instance, tab_name, active_checkbox, x_text, y_text, width_text=None, height_text=None):
-        active_value = 'true' if active_checkbox.active else 'false'
-        try:
-            x_value = x_text.text
-            y_value = y_text.text
-            width_value = width_text.text if width_text else ""
-            height_value = height_text.text if height_text else ""
-            if width_value and height_value:
-                self.send_coordi_info(tab_name, active_value, x_value, y_value, width_value, height_value)
-                print(f"{tab_name} - Active: {active_value}, X: {x_value}, Y: {y_value}, Width: {width_value}, Height: {height_value}")
-            else:
-                self.send_coordi_info(tab_name, active_value, x_value, y_value)
-                print(f"{tab_name} - Active: {active_value}, X: {x_value}, Y: {y_value}")
-        except ValueError:
-            print('숫자를 기입해주세요.')
-
-
-    def send_temp_callback(self, instance, tab_name, min_temp, max_temp):
-        min_value = min_temp.text
-        max_value = max_temp.text
-        self.send_temp_info(tab_name, min_value, max_value)
-        
-
-
-    def send_temp_info(self, tab_name, min_value, max_value):
-        if tab_name == "TAB 1":
-            self.info['SPOT1_MIN'] = min_value
-            self.info['SPOT1_MAX'] = max_value
-            print(f"SPOT1_MIN = {min_value}")
-            print(f"SPOT1_MAX = {max_value}")
-
-        elif tab_name == "TAB 2":
-            self.info['SPOT2_MIN'] = min_value
-            self.info['SPOT2_MAX'] = max_value
-            print(f"SPOT2_MIN = {min_value}")
-            print(f"SPOT2_MAX = {max_value}")
-        
-        elif tab_name == "TAB 3":
-            self.info['SPOT3_MIN'] = min_value
-            self.info['SPOT3_MAX'] = max_value
-            print(f"SPOT3_MIN = {min_value}")
-            print(f"SPOT3_MAX = {max_value}")
-        
-        elif tab_name == "TAB 4":
-            self.info['BOX1_MIN'] = min_value
-            self.info['BOX1_MAX'] = max_value
-            print(f"BOX1_MIN = {min_value}")
-            print(f"BOX1_MAX = {max_value}")
-
-        elif tab_name == "TAB 5":
-            self.info['BOX2_MIN'] = min_value
-            self.info['BOX2_MAX'] = max_value
-            print(f"BOX2_MIN = {min_value}")
-            print(f"BOX2_MAX = {max_value}")
-
-        elif tab_name == "TAB 6":
-            self.info['BOX3_MIN'] = min_value
-            self.info['BOX3_MAX'] = max_value
-            print(f"BOX3_MIN = {min_value}")
-            print(f"BOX3_MAX = {max_value}")
-
-        else:
-            print("no TAB!")
-            pass
-        
-
-
-    def send_coordi_info(self, tab_name, active_value, x_value, y_value, width_value = None, height_value= None):
-        if tab_name == "TAB 1": # spot1
-            active_url = self.api.make_url(self.rest_url['SPOT1_ACTIVE'], True, active_value) 
-            result = self.api.set_camera_value(active_url) 
-            self.info['SPOT1_ACTIVE'] = active_value
-            print(f"active_url = {active_url}")
-            print(f"check 1 result = {result} active_value = {active_value}")
-
-            X_url = self.api.make_url(self.rest_url['SPOT1_X'], True, x_value) 
-            result = self.api.set_camera_value(X_url) 
-            self.info['SPOT1_X'] = x_value
-            print(f"X_url = {X_url}")
-            print(f"check 1 result = {result} x_value = {x_value}")
-
-            Y_url = self.api.make_url(self.rest_url['SPOT1_Y'], True, y_value) 
-            result = self.api.set_camera_value(Y_url) 
-            self.info['SPOT1_Y'] = y_value
-            print(f"Y_url = {Y_url}")
-            print(f"check 1 result = {result} y_value = {y_value}")
-
-            if width_value and height_value:
-                self.info ['SPOT1_W'] = width_value
-                self.info ['SPOT1_h'] = height_value
-
-        elif tab_name == "TAB 2": # spot2
-            active_url = self.api.make_url(self.rest_url['SPOT2_ACTIVE'], True, active_value) 
-            result = self.api.set_camera_value(active_url) 
-            self.info['SPOT2_ACTIVE'] = active_value
-            print(f"active_url = {active_url}")
-            print(f"check 2 result = {result} active_value = {active_value}")
-
-            X_url = self.api.make_url(self.rest_url['SPOT2_X'], True, x_value) 
-            result = self.api.set_camera_value(X_url) 
-            self.info['SPOT2_X'] = x_value
-            print(f"X_url = {X_url}")
-            print(f"check 2 result = {result} x_value = {x_value}")
-
-            Y_url = self.api.make_url(self.rest_url['SPOT2_Y'], True, y_value) 
-            result = self.api.set_camera_value(Y_url) 
-            self.info['SPOT2_Y'] = y_value
-            print(f"Y_url = {Y_url}")
-            print(f"check 2 result = {result} y_value = {y_value}")
-
-            if width_value and height_value:
-                self.info ['SPOT2_W'] = width_value
-                self.info ['SPOT2_h'] = height_value
-
-            
-        elif tab_name == "TAB 3": # spot3
-            active_url = self.api.make_url(self.rest_url['SPOT3_ACTIVE'], True, active_value) 
-            result = self.api.set_camera_value(active_url) 
-            self.info['SPOT3_ACTIVE'] = active_value
-            print(f"active_url = {active_url}")
-            print(f"check 3 result = {result} active_value = {active_value}")
-
-            X_url = self.api.make_url(self.rest_url['SPOT3_X'], True, x_value) 
-            result = self.api.set_camera_value(X_url) 
-            self.info['SPOT3_X'] = x_value
-            print(f"X_url = {X_url}")
-            print(f"check 3 result = {result} x_value = {x_value}")
-
-            Y_url = self.api.make_url(self.rest_url['SPOT3_Y'], True, y_value) 
-            result = self.api.set_camera_value(Y_url) 
-            self.info['SPOT3_Y'] = y_value
-            print(f"Y_url = {Y_url}")
-            print(f"check 3 result = {result} y_value = {y_value}")
-
-            if width_value and height_value:
-                self.info ['SPOT3_W'] = width_value
-                self.info ['SPOT3_h'] = height_value
-            
-        elif tab_name == "TAB 4": # box1
-            active_url = self.api.make_url(self.rest_url['BOX1_ACTIVE'], True, active_value) 
-            result = self.api.set_camera_value(active_url) 
-            self.info['BOX1_ACTIVE'] = active_value
-            print(f"active_url = {active_url}")
-            print(f"check 4 result = {result} active_value = {active_value}")
-
-            X_url = self.api.make_url(self.rest_url['BOX1_X'], True, x_value) 
-            result = self.api.set_camera_value(X_url) 
-            self.info['BOX1_X'] = x_value
-            print(f"X_url = {X_url}")
-            print(f"check 4 result = {result} x_value = {x_value}")
-
-            Y_url = self.api.make_url(self.rest_url['BOX1_Y'], True, y_value) 
-            result = self.api.set_camera_value(Y_url) 
-            self.info['BOX1_Y'] = y_value
-            print(f"Y_url = {Y_url}")
-            print(f"check 4 result = {result} y_value = {y_value}")
-        
-            if width_value and height_value:
-                # width 
-                width_url = self.api.make_url(self.rest_url['BOX1_W'], True, width_value) 
-                result = self.api.set_camera_value(width_url) 
-                self.info ['BOX1_W'] = width_value
-
-                # height
-                height_url = self.api.make_url(self.rest_url['BOX1_H'], True, height_value) 
-                result = self.api.set_camera_value(height_url) 
-                self.info ['BOX1_H'] = height_value
-            
-        elif tab_name == "TAB 5": # box2
-            active_url = self.api.make_url(self.rest_url['BOX2_ACTIVE'], True, active_value) 
-            result = self.api.set_camera_value(active_url) 
-            self.info['BOX2_ACTIVE'] = active_value
-            print(f"active_url = {active_url}")
-            print(f"check 5 result = {result} active_value = {active_value}")
-
-            X_url = self.api.make_url(self.rest_url['BOX2_X'], True, x_value) 
-            result = self.api.set_camera_value(X_url) 
-            self.info['BOX2_X'] = x_value
-            print(f"X_url = {X_url}")
-            print(f"check 5 result = {result} x_value = {x_value}")
-
-            Y_url = self.api.make_url(self.rest_url['BOX2_Y'], True, y_value) 
-            result = self.api.set_camera_value(Y_url) 
-            self.info['BOX2_Y'] = y_value
-            print(f"Y_url = {Y_url}")
-            print(f"check 5 result = {result} y_value = {y_value}")
-        
-            if width_value and height_value:
-                # width 
-                width_url = self.api.make_url(self.rest_url['BOX2_W'], True, width_value) 
-                result = self.api.set_camera_value(width_url) 
-                self.info ['BOX2_W'] = width_value
-
-                # height
-                height_url = self.api.make_url(self.rest_url['BOX2_H'], True, height_value) 
-                result = self.api.set_camera_value(height_url) 
-                self.info ['BOX2_H'] = height_value
-
-            
-        elif tab_name == "TAB 6": # box3
-            print(f"dic = {self.info}")
-            active_url = self.api.make_url(self.rest_url['BOX3_ACTIVE'], True, active_value) 
-            result = self.api.set_camera_value(active_url) 
-            self.info['BOX3_ACTIVE'] = active_value
-            print(f"active_url = {active_url}")
-            print(f"check 6 result = {result} active_value = {active_value}")
-
-            X_url = self.api.make_url(self.rest_url['BOX3_X'], True, x_value) 
-            result = self.api.set_camera_value(X_url) 
-            self.info['BOX3_X'] = x_value
-            print(f"X_url = {X_url}")
-            print(f"check 6 result = {result} x_value = {x_value}")
-
-            Y_url = self.api.make_url(self.rest_url['BOX3_Y'], True, y_value) 
-            result = self.api.set_camera_value(Y_url) 
-            self.info['BOX3_Y'] = y_value
-            print(f"Y_url = {Y_url}")
-            print(f"check 6 result = {result} y_value = {y_value}")
-        
-            if width_value and height_value:
-                # width 
-                width_url = self.api.make_url(self.rest_url['BOX3_W'], True, width_value) 
-                result = self.api.set_camera_value(width_url) 
-                self.info ['BOX3_W'] = width_value
-
-                # height
-                height_url = self.api.make_url(self.rest_url['BOX3_H'], True, height_value) 
-                result = self.api.set_camera_value(height_url) 
-                self.info ['BOX3_H'] = height_value

@@ -1,24 +1,15 @@
-import traceback
-import requests
-import xml.etree.ElementTree as ET
 import time
-
-# URL SAMPLE
-#=========================================URL모음
-# self.url = "http://192.168.0.178/prod/res/image/sysimg/measureFuncs/"
-# self.boxes = f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/mbox/1"
-# self.active = f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/mbox/1/active"
-# self.max = f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/mbox/1/maxT"
-# self.avg = f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/mbox/1/avgT"
-# self.min = f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/mbox/1/minT"
-# self.min = f"http://192.168.0.178/prod/res/image/sysimg/measureFuncs/mbox/1/width?set=15"
-# http://192.168.0.178/prod/res/image/sysimg/measureFuncs/spot/1/active
+import logging
+import requests
+import traceback
+import xml.etree.ElementTree as ET
 
 
-
+logger = logging.getLogger("TRACE")
 
 class API():
     def __init__(self, ip):
+        logger.info(f"API CLASS Init")
         self.ip = ip
         self.base_url = f"http://{ip}/prod/res"
         self.rest_url = {
@@ -26,6 +17,16 @@ class API():
                         "OVERLAY" : ['resmon', 'config', 'hideGraphics'], 
                         "MODE" : ['image', 'sysimg', 'fusion', 'fusionData', 'fusionMode'], 
                         "PALETTE" : ['image','sysimg','palette','readFile'], 
+                        
+                        "GLOBAL_EMISS" :['image', 'sysimg', 'basicImgData', 'objectParams','emissivity'], 
+                        "GLOBAL_RT" :['image', 'sysimg', 'basicImgData', 'objectParams','ambTemp'], 
+                        "GLOBAL_RH" :['image', 'sysimg', 'basicImgData', 'objectParams','relHum'], 
+                        "GLOBAL_AT" :['image', 'sysimg', 'basicImgData', 'objectParams','atmTemp'], 
+                        "GLOBAL_OD" :['image', 'sysimg', 'basicImgData', 'objectParams','objectDistance'], 
+                        "GLOBAL_EIRW" :['image', 'sysimg', 'basicImgData', 'objectParams','extOptTransm'], # External IR Window
+                        "GLOBAL_TEMP" :['image', 'sysimg', 'basicImgData', 'objectParams','extOptTemp'], 
+                        "GLOBAL_TRS" :['image', 'sysimg', 'basicImgData', 'objectParams','estAtmTransm'], 
+                        
                         
                         "SPOT1_ACTIVE" : ['image', 'sysimg', 'measureFuncs', 'spot', '1', 'active'], 
                         "SPOT1_X" : ['image', 'sysimg', 'measureFuncs', 'spot', '1', 'x'], 
@@ -70,6 +71,15 @@ class API():
                     "OVERLAY" : None,
                     "MODE" : None,
                     "PALETTE" : None,
+                    "GLOBAL_EMISS" : None,
+                    "GLOBAL_RH" : None,
+                    "GLOBAL_AT" : None,
+                    "GLOBAL_OD" : None,
+                    "GLOBAL_TRS" : None,
+                    "GLOBAL_EIRW" : None,
+                    "GLOBAL_TEMP" : None,
+                    "GLOBAL_RT" : None,
+                    
                     "SPOT1_ACTIVE" : None,
                     "SPOT1_X" : None,
                     "SPOT1_Y" : None,
@@ -107,12 +117,22 @@ class API():
                     "BOX3_MIN" : '10',
                     "BOX3_MAX" : '40',
                     }
-        for key, value in self.rest_url.items():
-            url = self.make_url(value)
-            result = self.get_camera_value(url)
-            self.INFO[key] = result
-        for value, item in self.INFO.items():
-            print(f"{value}= \t {item}")
+        try:
+            for key, value in self.rest_url.items():
+                url = self.make_url(value)
+                result = self.get_camera_value(url)
+                if result is None:
+                    continue
+                if len(result) > 6:
+                    result = result[:6]
+                self.INFO[key] = result
+            for value, item in self.INFO.items():
+                print(f"{value}= \t {item}")
+                print(len(item))
+        except Exception as e:
+            print(f"API INIT ERROR {traceback.format_exc()}")
+            logger.error(f"API INIT ERROR {e}")
+        
 
 
     def make_url(self, data_list, set = False, value = None):
@@ -128,17 +148,24 @@ class API():
             return URL
         except ValueError as e:
             print(f"API / make_url error: {traceback.format_exc()}")
+            logger.error(f"API / make_url error: {traceback.format_exc()}")
 
 
+            
     def get_camera_value(self, URL):
         try:
             response = requests.get(URL)
             root = ET.fromstring(response.content)
             if response.status_code == 200:
                 get_value = root.find(".//xsi:value", namespaces={"xsi": "http://www.w3.org/2001/XMLSchema-instance"}).text
-            return get_value
+                return get_value
+            else:
+                print(f"Request failed with status code: {response.status_code}")
+                return None
         except Exception as e:
             print(f"get_camera_value Error : {e}")
+            logger.error(f"get_camera_value Error : {e}")
+            return None
 
 
 
@@ -155,6 +182,7 @@ class API():
                 
         except Exception as e:
             print(f"set_camera_value Error: {e}")
+            logger.error(f"set_camera_value Error: {e}")
             return False  # 예외 발생 시 False 반환
     
 
