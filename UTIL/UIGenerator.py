@@ -179,37 +179,31 @@ class MAINUI():
             self.chart_data_spot1.append(temperature)
             data = self.list_normalize(self.chart_data_spot1)
             self.update_graph_spot(data, self.plot_spot1)
-            print(f"spot1 data\t len = {len(data)}   data = {data}")
         
         elif category == "spot2":
             self.chart_data_spot2.append(temperature)
             data = self.list_normalize(self.chart_data_spot2)
             self.update_graph_spot(data, self.plot_spot2)
-            print(f"spot2 data\t len = {len(data)}   data = {data}")
         
         elif category == "spot3":
             self.chart_data_spot3.append(temperature)
             data = self.list_normalize(self.chart_data_spot3)
             self.update_graph_spot(data, self.plot_spot3)
-            print(f"spot3 data\t len = {len(data)}   data = {data}")
         
         elif category == "box1":
             self.chart_data_box1.append(temperature)
             self.chart_data_box1 = self.list_normalize(self.chart_data_box1)
             self.update_graph_box(self.chart_data_box1, self.boxplot_max_1, self.boxplot_min_1)
-            # print(f"box1 data\t len = {len(data)}   data = {data}")
         
         elif category == "box2":
             self.chart_data_box2.append(temperature)
             self.chart_data_box2 = self.list_normalize(self.chart_data_box2)
             self.update_graph_box(self.chart_data_box2, self.boxplot_max_2, self.boxplot_min_2)
-            # print(f"box2 data\t len = {len(data)}   data = {data}")
         
         elif category == "box3":
             self.chart_data_box3.append(temperature)
             self.chart_data_box3 = self.list_normalize(self.chart_data_box3)
             self.update_graph_box(self.chart_data_box3, self.boxplot_max_3, self.boxplot_min_3)
-            # print(f"box3 data\t len = {len(data)}   data = {data}")
         else:
             print("invalid Value")
             

@@ -62,7 +62,7 @@ class OpenCVCamera(Image):
                 texture.blit_buffer(buf, colorfmt='bgr', bufferfmt='ubyte')
                 self.texture = texture
             else:
-                print('pass while')
+                pass
             time.sleep(0.05)
         except Exception as e:
             print(f"Error in camera update: {traceback.format_exc()}")          
@@ -130,9 +130,10 @@ class OpenCVCamera(Image):
             final_y = round((1065 - touch.pos[1]) / 750 * 59) + 1
             if self.collide_point(*touch.pos):
                 self.coordinate_label.text = f"X = {final_x}\nY = {round(final_y)}"
-                print(f"Mouse clicked at (x = {final_x}, y = {final_y})")
+                # print(f"Mouse clicked at (x = {final_x}, y = {final_y})")
         else:
-            print("The coordinates are out of bounds")
+            pass
+            # print("The coordinates are out of bounds")
 
 
        
